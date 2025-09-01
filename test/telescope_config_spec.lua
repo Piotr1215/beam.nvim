@@ -73,30 +73,44 @@ describe('beam.nvim telescope configuration', function()
     end)
 
     it('uses telescope for multiple buffers when cross_buffer enabled', function()
+      -- Clean up first
+      vim.cmd('silent! %bdelete!')
+
       beam.setup({
         cross_buffer = {
           enabled = true,
           fuzzy_finder = 'telescope',
+          include_hidden = true, -- Include all buffers in count
         },
         experimental = {
           telescope_single_buffer = { enabled = false },
         },
       })
 
-      -- Create multiple buffers with content to ensure they're loaded
-      vim.cmd('enew')
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'buffer 1' })
-      vim.cmd('enew')
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'buffer 2' })
+      -- Create multiple listed buffers
+      local buf1 = vim.api.nvim_create_buf(true, false) -- listed, not scratch
+      vim.api.nvim_buf_set_name(buf1, 'test1.txt')
+
+      local buf2 = vim.api.nvim_create_buf(true, false) -- listed, not scratch
+      vim.api.nvim_buf_set_name(buf2, 'test2.txt')
+
+      -- Make sure both buffers are loaded
+      vim.api.nvim_buf_set_lines(buf1, 0, -1, false, { 'content1' })
+      vim.api.nvim_buf_set_lines(buf2, 0, -1, false, { 'content2' })
 
       local cfg = require('beam.config').current
       local multiple = operators.has_multiple_buffers()
       local should_use = multiple and cfg.cross_buffer.enabled
 
-      assert.is_true(should_use)
+      assert.is_true(multiple, 'Should detect multiple buffers')
+      assert.is_true(
+        should_use,
+        'Should use telescope with multiple buffers and cross_buffer enabled'
+      )
 
       -- Clean up
-      vim.cmd('silent! %bdelete!')
+      vim.api.nvim_buf_delete(buf1, { force = true })
+      vim.api.nvim_buf_delete(buf2, { force = true })
     end)
 
     it(

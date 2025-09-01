@@ -1,0 +1,321 @@
+*beam.nvim.txt*   Search and operate on distant text without moving your cursor
+
+==============================================================================
+CONTENTS                                                   *beam.nvim-contents*
+
+1. Introduction.................................|beam.nvim-introduction|
+2. Installation.................................|beam.nvim-installation|
+3. Usage........................................|beam.nvim-usage|
+4. Configuration................................|beam.nvim-configuration|
+5. Telescope Integration........................|beam.nvim-telescope|
+6. Commands.....................................|beam.nvim-commands|
+7. Text Objects.................................|beam.nvim-text-objects|
+
+==============================================================================
+INTRODUCTION                                           *beam.nvim-introduction*
+
+beam.nvim enables you to perform text object operations (yank, delete, change,
+visual select) on distant text without moving your cursor. It hijacks Neovim's
+native search to provide a seamless interface for remote operations.
+
+Key features:
+- Search for text, operate on it, cursor returns (for yank/delete)
+- Works with ALL text objects (built-in and custom)
+- Visual feedback shows what will be operated on
+- Auto-discovers text objects from other plugins
+- Telescope integration for cross-buffer operations
+- Smart context-aware search highlighting
+
+==============================================================================
+INSTALLATION                                           *beam.nvim-installation*
+
+Using lazy.nvim:
+>lua
+  {
+    'Piotr1215/beam.nvim',
+    dependencies = {
+      'nvim-telescope/telescope.nvim',  -- Required for cross-buffer operations
+      'nvim-lua/plenary.nvim',          -- Required by telescope
+    },
+    config = function()
+      require('beam').setup()
+    end
+  }
+<
+
+Using packer.nvim:
+>lua
+  use {
+    'Piotr1215/beam.nvim',
+    requires = {
+      'nvim-telescope/telescope.nvim',
+      'nvim-lua/plenary.nvim',
+    },
+    config = function()
+      require('beam').setup()
+    end
+  }
+<
+
+==============================================================================
+USAGE                                                         *beam.nvim-usage*
+
+Basic workflow:
+1. Type operator + text object (e.g., `,yi"`)
+2. Neovim's search opens with previous search pre-filled
+3. Type your search term and press Enter
+4. Operation executes at target, cursor returns (for yank/delete)
+
+Basic Operations~
+                                                      *beam.nvim-basic-operations*
+`,yi"`          Search & yank inside quotes
+`,dap`          Search & delete around paragraph
+`,ciw`          Search & change inside word
+`,vi{`          Search & select inside curly braces
+
+Line Operations~
+                                                      *beam.nvim-line-operations*
+`,Y`            Search & yank entire line
+`,D`            Search & delete entire line
+`,C`            Search & change entire line
+`,V`            Search & select entire line
+
+Search Navigation~
+                                                    *beam.nvim-search-navigation*
+While searching:
+- `Ctrl-G`      Next match
+- `Ctrl-T`      Previous match
+- `Enter`       Execute operation
+- `Esc`         Cancel operation
+
+==============================================================================
+CONFIGURATION                                         *beam.nvim-configuration*
+
+Default setup:
+>lua
+  require('beam').setup({
+    prefix = ',',                      -- Your prefix key (mini-leader)
+    visual_feedback_duration = 150,    -- ms to show selection
+    clear_highlight = true,            -- Clear search highlight after operation
+    clear_highlight_delay = 500,       -- ms before clearing
+    cross_buffer = {
+      enabled = false,                 -- Enable cross-buffer operations
+      fuzzy_finder = 'telescope',      -- Fuzzy finder (telescope required when enabled)
+      include_hidden = false,          -- Include hidden buffers
+    },
+    auto_discover_text_objects = true, -- Auto-discover all available text objects
+    show_discovery_notification = true,-- Show notification about discovered objects
+    excluded_text_objects = {},       -- Exclude specific text objects (e.g., {'q', 'z'})
+    excluded_motions = {},             -- Exclude specific motions (e.g., {'Q', 'R'})
+    smart_highlighting = false,        -- Context-aware search highlighting
+  })
+<
+
+Full configuration with all options:
+>lua
+  require('beam').setup({
+    -- Core settings
+    prefix = ',',                      -- Prefix for all mappings
+    
+    -- Visual feedback
+    visual_feedback_duration = 150,    -- Duration to show selection before operation
+    clear_highlight = true,            -- Clear search highlight after operation
+    clear_highlight_delay = 500,       -- Delay before clearing highlight
+    
+    -- Cross-buffer operations with Telescope
+    cross_buffer = {
+      enabled = false,                 -- Enable cross-buffer operations
+      fuzzy_finder = 'telescope',      -- Fuzzy finder to use (currently only telescope)
+      include_hidden = false,          -- Include hidden buffers in search
+    },
+    
+    -- Text object discovery
+    auto_discover_text_objects = true, -- Discover text objects from all plugins
+    show_discovery_notification = true,-- Notify about discovered objects
+    excluded_text_objects = {},       -- List of text object keys to exclude
+    excluded_motions = {},             -- List of motion keys to exclude
+    
+    -- Search behavior
+    smart_highlighting = false,        -- Context-aware search highlighting (native search only)
+    
+    -- Experimental features
+    experimental = {
+      telescope_single_buffer = {
+        enabled = false,               -- Use Telescope for single buffer search
+        theme = 'dropdown',            -- Theme: 'dropdown', 'cursor', 'ivy'
+        preview = false,               -- Show preview pane
+        winblend = 10                  -- Window transparency (0-100)
+      }
+    }
+  })
+<
+
+==============================================================================
+TELESCOPE INTEGRATION                                     *beam.nvim-telescope*
+
+beam.nvim integrates with Telescope for powerful fuzzy finding across buffers.
+The integration is intelligent and context-aware.
+
+When Telescope is Used~
+                                              *beam.nvim-telescope-when-used*
+
+1. Cross-buffer with multiple buffers: When `cross_buffer.enabled = true` and
+   multiple buffers are detected, Telescope is automatically used for fuzzy
+   finding across buffers.
+
+2. Single-buffer (optional): When `experimental.telescope_single_buffer.enabled = true`,
+   Telescope is used even for single-buffer operations.
+
+Configuration Layers~
+                                         *beam.nvim-telescope-configuration*
+
+>lua
+  require('beam').setup({
+    -- Cross-buffer configuration
+    cross_buffer = {
+      enabled = false,                 -- Enable cross-buffer operations
+      fuzzy_finder = 'telescope',      -- Fuzzy finder to use
+      include_hidden = false,          -- Include hidden buffers in search
+    },
+    
+    -- Experimental: Use Telescope for single buffer too
+    experimental = {
+      telescope_single_buffer = {
+        enabled = false,               -- Use Telescope for single buffer search
+        theme = 'dropdown',            -- Theme: 'dropdown', 'cursor', 'ivy'
+        preview = false,               -- Show preview pane
+        winblend = 10,                 -- Window transparency (0-100)
+      }
+    }
+  })
+<
+
+Buffer Visibility~
+                                           *beam.nvim-telescope-visibility*
+
+When `include_hidden = false` (default), only buffers visible in windows are
+searched. This prevents accidentally operating on background buffers.
+
+Visual indicators in Telescope:
+- `●` Visible buffer (in a window)
+- `○` Hidden buffer (loaded but not visible)
+
+Examples~
+                                             *beam.nvim-telescope-examples*
+
+Search only visible buffers (default):
+>lua
+  require('beam').setup({
+    cross_buffer = {
+      enabled = true,
+      include_hidden = false  -- Only search visible buffers
+    }
+  })
+<
+
+Search all loaded buffers:
+>lua
+  require('beam').setup({
+    cross_buffer = {
+      enabled = true,
+      include_hidden = true   -- Include hidden buffers
+    }
+  })
+<
+
+Use Telescope for everything:
+>lua
+  require('beam').setup({
+    cross_buffer = { enabled = true },
+    experimental = {
+      telescope_single_buffer = {
+        enabled = true,
+        theme = 'cursor',     -- Compact cursor theme
+        preview = true        -- Show preview
+      }
+    }
+  })
+<
+
+Behavior Notes~
+                                                 *beam.nvim-telescope-notes*
+
+- Navigation: Ctrl-G/T navigation doesn't work with Telescope (use Telescope's
+  own navigation)
+- Smart gating: Telescope only activates when truly needed (multiple buffers
+  for cross-buffer mode)
+- Buffer switching: For change/visual operations, beam opens the target buffer
+  in a split; for yank/delete, it returns to your original position
+
+==============================================================================
+COMMANDS                                                 *beam.nvim-commands*
+
+`:BeamReload`           Reload the plugin configuration
+`:BeamDiscoverNow`      Manually trigger text object discovery
+`:BeamShowTextObjects`  Display all discovered text objects
+
+==============================================================================
+TEXT OBJECTS                                         *beam.nvim-text-objects*
+
+beam.nvim supports ALL Vim/Neovim text objects. Here are the most common:
+
+Built-in Vim Text Objects~
+                                             *beam.nvim-builtin-text-objects*
+
+`iw`/`aw`       Inside/around word
+`iW`/`aW`       Inside/around WORD (includes punctuation)
+`is`/`as`       Inside/around sentence
+`ip`/`ap`       Inside/around paragraph
+`i"`/`a"`       Inside/around double quotes
+`i'`/`a'`       Inside/around single quotes
+`i(`/`a(`       Inside/around parentheses
+`i[`/`a[`       Inside/around square brackets
+`i{`/`a{`       Inside/around curly braces
+`i<`/`a<`       Inside/around angle brackets
+`it`/`at`       Inside/around HTML/XML tags
+
+Alternative Syntax~
+                                           *beam.nvim-alternative-text-objects*
+
+`ib`/`ab`       Same as `i(`/`a(` (parentheses)
+`iB`/`aB`       Same as `i{`/`a{` (braces)
+`iq`/`aq`       Same as `i"`/`a"` (double quotes)
+
+Auto-Discovery~
+                                                *beam.nvim-auto-discovery*
+
+When `auto_discover_text_objects = true`, beam automatically finds and uses
+text objects from:
+- treesitter-textobjects: `if` (function), `ic` (class), `il` (loop), etc.
+- mini.ai: Custom text objects you've defined
+- nvim-various-textobjs: `ii` (indentation), `R` (rest of line), etc.
+- targets.vim: Seek-able text objects with next/last variants
+- Any other plugin that defines text objects!
+
+Smart Highlighting~
+                                            *beam.nvim-smart-highlighting*
+
+When `smart_highlighting = true`, beam constrains search results based on the
+text object you're using. This means when you search with delimiter-based
+text objects, only matches within those delimiters are highlighted.
+
+Note: Smart highlighting only works with native Vim search (`/`). It is not
+available when using Telescope.
+
+Example:
+Without smart highlighting:
+`,di"`  -> `/test` -> highlights ALL occurrences of "test"
+
+With smart highlighting:
+`,di"`  -> `/test` -> only highlights "test" inside double quotes
+
+Supported text objects for smart highlighting:
+- Quotes: `i"`, `a"`, `i'`, `a'`, `i\``, `a\``
+- Brackets: `i(`, `a(`, `i[`, `a[`, `i{`, `a{`, `i<`, `a<`
+- Alternative syntax: `ib`/`ab`, `iB`/`aB`, `iq`/`aq`
+- HTML/XML tags: `it`, `at`
+- Block comments: `iC`, `aC`
+- Function arguments: `ia`
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

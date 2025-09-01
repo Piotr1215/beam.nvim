@@ -13,9 +13,9 @@ test:
 	@echo -n "Tests passed: "
 	@grep "Success: " /tmp/beam-test-output.txt | awk '{sum+=$$3} END {print sum}'
 	@echo -n "Tests failed: "
-	@grep "Failed : " /tmp/beam-test-output.txt | awk '{sum+=$$3} END {print sum}'
+	@grep "Failed : " /tmp/beam-test-output.txt | awk '{sum+=$$3} END {if(sum=="") print 0; else print sum}'
 	@echo "============================================"
-	@if grep -q "Tests Failed" /tmp/beam-test-output.txt 2>/dev/null; then rm -f /tmp/beam-test-output.txt; exit 1; fi
+	@if grep -q "Tests Failed" /tmp/beam-test-output.txt 2>/dev/null || grep -q "^[[:space:]]*Failed : [1-9]" /tmp/beam-test-output.txt 2>/dev/null; then rm -f /tmp/beam-test-output.txt; exit 1; fi
 	@rm -f /tmp/beam-test-output.txt
 
 # Run tests with output visible (not headless)

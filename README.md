@@ -178,7 +178,11 @@ require('beam').setup({
   visual_feedback_duration = 150,    -- ms to show selection
   clear_highlight = true,            -- Clear search highlight after operation
   clear_highlight_delay = 500,       -- ms before clearing
-  cross_buffer = false,              -- Enable cross-buffer operations (experimental)
+  cross_buffer = {
+    enabled = false,                 -- Enable cross-buffer operations
+    fuzzy_finder = 'telescope',      -- Fuzzy finder (telescope required when enabled)
+    include_hidden = false,          -- Include hidden buffers
+  },
   auto_discover_text_objects = true, -- Auto-discover all available text objects
   show_discovery_notification = true,-- Show notification about discovered objects
   excluded_text_objects = {},       -- Exclude specific text objects (e.g., {'q', 'z'})
@@ -187,15 +191,82 @@ require('beam').setup({
 })
 ```
 
-### Cross-Buffer Operations
+### Cross-Buffer Operations & Telescope Integration
 
-**Note**: Cross-buffer functionality is experimental. When enabled with `cross_buffer = true`, beam can search and operate across all listed buffers.
+beam.nvim integrates with [Telescope](https://github.com/nvim-telescope/telescope.nvim) for powerful fuzzy finding across buffers. The integration is intelligent and context-aware:
 
-```vim
-" Example: Yank quotes from another buffer
-,yi"<Enter>searchterm<Enter>
-" Finds 'searchterm' in any buffer, yanks quotes, returns home
+#### When Telescope is Used
+
+1. **Cross-buffer with multiple buffers**: When `cross_buffer.enabled = true` and multiple buffers are detected, Telescope is automatically used for fuzzy finding across buffers.
+
+2. **Single-buffer (optional)**: When `experimental.telescope_single_buffer.enabled = true`, Telescope is used even for single-buffer operations.
+
+#### Configuration Layers
+
+```lua
+require('beam').setup({
+  -- Cross-buffer configuration
+  cross_buffer = {
+    enabled = false,                 -- Enable cross-buffer operations
+    fuzzy_finder = 'telescope',      -- Fuzzy finder to use (currently only telescope)
+    include_hidden = false,          -- Include hidden buffers in search
+  },
+  
+  -- Experimental: Use Telescope for single buffer too
+  experimental = {
+    telescope_single_buffer = {
+      enabled = false,               -- Use Telescope for single buffer search
+      theme = 'dropdown',            -- Theme: 'dropdown', 'cursor', 'ivy'
+      preview = false,               -- Show preview pane
+      winblend = 10,                 -- Window transparency (0-100)
+    }
+  }
+})
 ```
+
+#### Buffer Visibility
+
+When `include_hidden = false` (default), only buffers visible in windows are searched. This prevents accidentally operating on background buffers. Visual indicators in Telescope:
+- `●` - Visible buffer (in a window)
+- `○` - Hidden buffer (loaded but not visible)
+
+#### Examples
+
+```lua
+-- Search only visible buffers (default)
+require('beam').setup({
+  cross_buffer = {
+    enabled = true,
+    include_hidden = false  -- Only search visible buffers
+  }
+})
+
+-- Search all loaded buffers
+require('beam').setup({
+  cross_buffer = {
+    enabled = true,
+    include_hidden = true   -- Include hidden buffers
+  }
+})
+
+-- Use Telescope for everything
+require('beam').setup({
+  cross_buffer = { enabled = true },
+  experimental = {
+    telescope_single_buffer = {
+      enabled = true,
+      theme = 'cursor',     -- Compact cursor theme
+      preview = true        -- Show preview
+    }
+  }
+})
+```
+
+#### Behavior Notes
+
+- **Navigation**: Ctrl-G/T navigation doesn't work with Telescope (use Telescope's own navigation)
+- **Smart gating**: Telescope only activates when truly needed (multiple buffers for cross-buffer mode)
+- **Buffer switching**: For change/visual operations, beam opens the target buffer in a split; for yank/delete, it returns to your original position
 
 ### Auto-Discovery
 
@@ -281,16 +352,21 @@ require('beam').setup({
   clear_highlight = true,            -- Clear search highlight after operation
   clear_highlight_delay = 500,       -- Delay before clearing highlight
   
-  -- Advanced features
+  -- Cross-buffer operations with Telescope
   cross_buffer = {
     enabled = false,                 -- Enable cross-buffer operations
-    fuzzy_finder = 'telescope'       -- Fuzzy finder for cross-buffer (required when enabled)
+    fuzzy_finder = 'telescope',      -- Fuzzy finder to use (currently only telescope)
+    include_hidden = false,          -- Include hidden buffers in search (default: only visible)
   },
+  
+  -- Text object discovery
   auto_discover_text_objects = true, -- Discover text objects from all plugins
   show_discovery_notification = true,-- Notify about discovered objects
   excluded_text_objects = {},       -- List of text object keys to exclude (e.g., {'q', 'z'})
   excluded_motions = {},             -- List of motion keys to exclude (e.g., {'Q', 'R'})
-  smart_highlighting = false,        -- Context-aware search highlighting
+  
+  -- Search behavior
+  smart_highlighting = false,        -- Context-aware search highlighting (native search only)
   
   -- Experimental features
   experimental = {
@@ -373,7 +449,8 @@ require('beam').setup({
   -- Cross-buffer configuration
   cross_buffer = {
     enabled = true,                  -- Enable cross-buffer operations
-    fuzzy_finder = 'telescope'       -- Currently only 'telescope' is supported
+    fuzzy_finder = 'telescope',      -- Currently only 'telescope' is supported
+    include_hidden = false           -- Search only visible buffers by default (true = all buffers)
   },
   
   -- Optional: Use Telescope even for single buffer

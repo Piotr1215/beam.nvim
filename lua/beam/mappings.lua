@@ -45,28 +45,24 @@ function M.setup()
     end
   end
 
+  -- Line operators with Telescope support
+  local line_setup_funcs = {
+    Y = 'BeamYankLineSearchSetup',
+    D = 'BeamDeleteLineSearchSetup',
+    C = 'BeamChangeLineSearchSetup',
+    V = 'BeamVisualLineSearchSetup',
+  }
+
   for op_key, op_info in pairs(config.line_operators) do
     local key = prefix .. op_key
     local desc = 'Search & ' .. op_info.verb
+    local setup_func_name = line_setup_funcs[op_key]
+
     vim.keymap.set('n', key, function()
-      operators.BeamSearchOperatorPending = {
-        action = op_info.action,
-        textobj = '',
-        saved_pos_for_yank = op_info.save_pos and vim.fn.getpos('.') or nil,
-      }
-
-      vim.g.beam_search_operator_indicator = op_info.verb
-
-      vim.cmd([[
-        silent! augroup! BeamSearchOperatorExecute
-        augroup BeamSearchOperatorExecute
-          autocmd!
-          autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator(); vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus')
-        augroup END
-      ]])
-
-      vim.cmd('redrawstatus')
-      vim.api.nvim_feedkeys('/', 'n', false)
+      local result = operators[setup_func_name]()
+      if result == '/' then
+        vim.api.nvim_feedkeys('/', 'n', false)
+      end
     end, { desc = desc })
   end
 end

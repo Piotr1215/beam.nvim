@@ -8,6 +8,7 @@ M.defaults = {
   cross_buffer = {
     enabled = false, -- Disabled by default for safety
     fuzzy_finder = 'telescope', -- Fuzzy finder to use: 'telescope' (future: 'fzf-lua', 'mini.pick')
+    include_hidden = false, -- Include hidden buffers in search (default: only visible buffers)
   },
   custom_text_objects = {},
   auto_discover_text_objects = false, -- Auto-discover and register all available text objects

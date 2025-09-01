@@ -209,8 +209,24 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
     if found == 0 then
       -- Search other buffers
       local buffers = vim.fn.getbufinfo({ buflisted = 1 })
+      
+      -- Build a set of visible buffers if include_hidden is false
+      local visible_buffers = nil
+      local include_hidden = cfg.cross_buffer.include_hidden
+      if include_hidden == false or include_hidden == "false" then
+        visible_buffers = {}
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          local bufnr = vim.api.nvim_win_get_buf(win)
+          visible_buffers[bufnr] = true
+        end
+      end
 
       for _, buf in ipairs(buffers) do
+        -- Skip hidden buffers if include_hidden is false
+        if visible_buffers and not visible_buffers[buf.bufnr] then
+          goto continue
+        end
+        
         if
           buf.bufnr ~= start_buf
           and vim.api.nvim_buf_is_valid(buf.bufnr)
@@ -253,6 +269,7 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
             end
           end
         end
+        ::continue::
       end
 
       if found == 0 then
@@ -396,16 +413,40 @@ end
 
 -- Helper to check if multiple buffers are open
 M.has_multiple_buffers = function()
+  local cfg = config.current
   local count = 0
   local buffers = vim.fn.getbufinfo({ buflisted = 1 })
-  for _, buf in ipairs(buffers) do
-    if vim.api.nvim_buf_is_loaded(buf.bufnr) then
-      count = count + 1
-      if count > 1 then
-        return true
+  
+  -- If include_hidden is false, only count visible buffers
+  -- Handle both boolean false and string "false"
+  local include_hidden = cfg.cross_buffer and cfg.cross_buffer.include_hidden
+  if cfg.cross_buffer and (include_hidden == false or include_hidden == "false") then
+    local visible_buffers = {}
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      local bufnr = vim.api.nvim_win_get_buf(win)
+      visible_buffers[bufnr] = true
+    end
+    
+    for _, buf in ipairs(buffers) do
+      if vim.api.nvim_buf_is_loaded(buf.bufnr) and visible_buffers[buf.bufnr] then
+        count = count + 1
+        if count > 1 then
+          return true
+        end
+      end
+    end
+  else
+    -- Count all loaded buffers
+    for _, buf in ipairs(buffers) do
+      if vim.api.nvim_buf_is_loaded(buf.bufnr) then
+        count = count + 1
+        if count > 1 then
+          return true
+        end
       end
     end
   end
+  
   return false
 end
 
@@ -487,6 +528,56 @@ M.BeamVisualSearchSetup = function(textobj)
     end
   end
   return original_visual_setup(textobj)
+end
+
+-- Line operator setup functions with Telescope support
+M.BeamYankLineSearchSetup = function()
+  local cfg = config.current
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
+    if ok then
+      telescope.search_and_yank_line()
+      return '' -- Don't trigger normal search
+    end
+  end
+  -- Fall back to normal search setup for line
+  return M.create_setup_function('yankline', true)('')
+end
+
+M.BeamDeleteLineSearchSetup = function()
+  local cfg = config.current
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
+    if ok then
+      telescope.search_and_delete_line()
+      return '' -- Don't trigger normal search
+    end
+  end
+  return M.create_setup_function('deleteline', true)('')
+end
+
+M.BeamChangeLineSearchSetup = function()
+  local cfg = config.current
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
+    if ok then
+      telescope.search_and_change_line()
+      return '' -- Don't trigger normal search
+    end
+  end
+  return M.create_setup_function('changeline', false)('')
+end
+
+M.BeamVisualLineSearchSetup = function()
+  local cfg = config.current
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
+    if ok then
+      telescope.search_and_visual_line()
+      return '' -- Don't trigger normal search
+    end
+  end
+  return M.create_setup_function('visualline', false)('')
 end
 
 return M
