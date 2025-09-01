@@ -174,7 +174,14 @@ M.BeamExecuteSearchOperator = function()
     return
   end
 
-  local pattern = vim.fn.getreg('/')
+  -- Get the pattern from our captured command line content or search register
+  -- CmdlineChanged captures it as it's typed, so we should always have it
+  local pattern = M.beam_search_pattern_from_cmdline or vim.fn.getreg('/')
+
+  -- Clear the stored pattern for next use
+  M.beam_search_pattern_from_cmdline = nil
+
+  -- If no pattern, user probably pressed Escape or cleared the search
   if not pattern or pattern == '' then
     M.BeamSearchOperatorPending = {}
     vim.cmd('silent! autocmd! BeamSearchOperatorExecute')
@@ -183,8 +190,15 @@ M.BeamExecuteSearchOperator = function()
     return
   end
 
-  -- Cross-buffer search if enabled
+  -- Execute with the captured pattern
+  M.BeamExecuteSearchOperatorImpl(pattern, pending)
+end
+
+M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
+  -- This is the actual implementation, moved from BeamExecuteSearchOperator
   local cfg = config.current
+
+  -- Cross-buffer search if enabled
   if cfg.cross_buffer then
     local start_buf = vim.api.nvim_get_current_buf()
     local start_pos = vim.api.nvim_win_get_cursor(0)
@@ -272,6 +286,16 @@ M.BeamExecuteSearchOperator = function()
         pending.saved_buf = nil
       end
     end
+  else
+    -- Cross-buffer disabled - only search current buffer
+    local found = vim.fn.search(pattern, 'c')
+    if found == 0 then
+      -- Pattern not found in current buffer
+      M.BeamSearchOperatorPending = {}
+      vim.g.beam_search_operator_indicator = nil
+      vim.cmd('redrawstatus')
+      return
+    end
   end
 
   vim.g.beam_search_operator_pattern = pattern
@@ -287,12 +311,18 @@ M.BeamExecuteSearchOperator = function()
     -- Direct execution for motion-based change using feedkeys with 'm' flag for remap
     vim.api.nvim_feedkeys('c' .. pending.textobj, 'm', false)
   else
-    -- Use operator function for everything else
-    _G.BeamSearchOperatorWrapper = function(type)
-      return M.BeamSearchOperator(type)
+    -- Check if we're in test mode (synchronous execution needed)
+    if vim.g.beam_test_mode then
+      -- Direct call for tests
+      M.BeamSearchOperator('line')
+    else
+      -- Use operator function for everything else
+      _G.BeamSearchOperatorWrapper = function(type)
+        return M.BeamSearchOperator(type)
+      end
+      vim.opt.operatorfunc = 'v:lua.BeamSearchOperatorWrapper'
+      vim.api.nvim_feedkeys('g@l', 'n', false)
     end
-    vim.opt.operatorfunc = 'v:lua.BeamSearchOperatorWrapper'
-    vim.api.nvim_feedkeys('g@l', 'n', false)
   end
 end
 
@@ -332,12 +362,13 @@ function M.create_setup_function(action, save_pos)
             cnoremap <expr> <CR> getcmdtype() == '/' && exists('b:beam_smart_suffix') ? '<End>' . b:beam_smart_suffix . '<CR>' : '<CR>'
           ]])
 
-          -- Setup autocmd for execution
+          -- Setup autocmd for execution with pattern capture
           vim.cmd([[
             silent! augroup! BeamSearchOperatorExecute
             augroup BeamSearchOperatorExecute
               autocmd!
-              autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator(); vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus'); vim.cmd('silent! cunmap <CR>'); vim.b.beam_smart_suffix = nil
+              autocmd CmdlineChanged / lua require('beam.operators').beam_search_pattern_from_cmdline = vim.fn.getcmdline()
+              autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator(); vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus'); vim.cmd('silent! cunmap <CR>'); vim.b.beam_smart_suffix = nil; vim.cmd('silent! autocmd! BeamSearchOperatorExecute CmdlineChanged')
             augroup END
           ]])
 
@@ -348,11 +379,13 @@ function M.create_setup_function(action, save_pos)
     end
 
     -- Standard search (no smart highlighting)
+    -- Set up autocmd to capture the pattern as it's typed
     vim.cmd([[
       silent! augroup! BeamSearchOperatorExecute
       augroup BeamSearchOperatorExecute
         autocmd!
-        autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator(); vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus')
+        autocmd CmdlineChanged / lua require('beam.operators').beam_search_pattern_from_cmdline = vim.fn.getcmdline()
+        autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator(); vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus'); vim.cmd('silent! autocmd! BeamSearchOperatorExecute CmdlineChanged')
       augroup END
     ]])
 

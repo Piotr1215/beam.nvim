@@ -3,7 +3,20 @@
 # Run tests with Plenary (default)
 test:
 	@echo "Running tests with Plenary..."
-	@nvim --headless -l test/run_tests.lua
+	@nvim --headless -l test/run_tests.lua 2>&1 | tee /tmp/beam-test-output.txt
+	@echo ""
+	@echo "============================================"
+	@echo "TEST SUMMARY"
+	@echo "============================================"
+	@echo -n "Total tests run: "
+	@grep -E "Success: |Failed :" /tmp/beam-test-output.txt | awk '{sum+=$$3} END {print sum}'
+	@echo -n "Tests passed: "
+	@grep "Success: " /tmp/beam-test-output.txt | awk '{sum+=$$3} END {print sum}'
+	@echo -n "Tests failed: "
+	@grep "Failed : " /tmp/beam-test-output.txt | awk '{sum+=$$3} END {print sum}'
+	@echo "============================================"
+	@if grep -q "Tests Failed" /tmp/beam-test-output.txt 2>/dev/null; then rm -f /tmp/beam-test-output.txt; exit 1; fi
+	@rm -f /tmp/beam-test-output.txt
 
 # Run tests with output visible (not headless)
 test-verbose:
