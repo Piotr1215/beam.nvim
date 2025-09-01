@@ -5,7 +5,10 @@ M.defaults = {
   visual_feedback_duration = 150,
   clear_highlight = true,
   clear_highlight_delay = 500,
-  cross_buffer = false, -- Disabled by default for safety
+  cross_buffer = {
+    enabled = false, -- Disabled by default for safety
+    fuzzy_finder = 'telescope', -- Fuzzy finder to use: 'telescope' (future: 'fzf-lua', 'mini.pick')
+  },
   custom_text_objects = {},
   auto_discover_text_objects = false, -- Auto-discover and register all available text objects
   show_discovery_notification = false, -- Show notification about discovered text objects
@@ -15,7 +18,12 @@ M.defaults = {
   experimental = {
     dot_repeat = false,
     count_support = false,
-    telescope_integration = false, -- Use Telescope for cross-buffer search
+    telescope_single_buffer = { -- Optional: Use Telescope for single buffer search
+      enabled = false,
+      theme = 'dropdown', -- Theme for picker: 'dropdown', 'cursor', 'ivy', or custom table
+      preview = false, -- Show preview in picker
+      winblend = 10, -- Window transparency (0-100)
+    },
   },
 }
 
@@ -68,6 +76,14 @@ M.current = {}
 
 function M.setup(opts)
   M.current = vim.tbl_deep_extend('force', M.defaults, opts or {})
+
+  -- Backward compatibility: convert boolean cross_buffer to table format
+  if type(M.current.cross_buffer) == 'boolean' then
+    M.current.cross_buffer = {
+      enabled = M.current.cross_buffer,
+      fuzzy_finder = 'telescope',
+    }
+  end
 
   if M.current.custom_text_objects then
     M.text_objects = vim.tbl_extend('force', M.text_objects, M.current.custom_text_objects)

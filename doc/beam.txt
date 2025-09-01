@@ -135,7 +135,10 @@ BASIC SETUP ~
     visual_feedback_duration = 150,   -- Ms to show selection
     clear_highlight = true,           -- Clear search after operation
     clear_highlight_delay = 500,      -- Ms before clearing
-    cross_buffer = false,             -- Search across buffers
+    cross_buffer = {
+      enabled = false,                -- Enable cross-buffer operations
+      fuzzy_finder = 'telescope'      -- Fuzzy finder (required for cross-buffer)
+    },
     auto_discover_text_objects = true, -- Auto-discover all text objects
     excluded_text_objects = {},      -- Exclude text objects (e.g., {'q'})
     excluded_motions = {},            -- Exclude motions (e.g., {'Q', 'R'})
@@ -277,6 +280,49 @@ With 20 text objects, you get 80+ mappings automatically:
 - 20 change operations (,ci{obj}, ,ca{obj})
 - 20 visual operations (,vi{obj}, ,va{obj})
 - Plus line operations
+
+==============================================================================
+TELESCOPE INTEGRATION                                      *beam-telescope*
+
+beam.nvim integrates with Telescope.nvim for enhanced search capabilities,
+especially for cross-buffer operations.
+
+INTELLIGENT BEHAVIOR ~
+- Single buffer: Uses native Vim search by default (fast)
+- Multiple buffers: Automatically uses Telescope when cross_buffer enabled
+- Optional: Can force Telescope for single buffer too
+
+CONFIGURATION ~
+>lua
+  require('beam').setup({
+    -- Enable cross-buffer operations
+    cross_buffer = {
+      enabled = true,
+      fuzzy_finder = 'telescope'  -- Currently only telescope supported
+    },
+    
+    -- Optional: Use Telescope for single buffer too
+    experimental = {
+      telescope_single_buffer = {
+        enabled = false,           -- Set true to always use Telescope
+        theme = 'dropdown',        -- 'dropdown', 'cursor', or 'ivy'
+        preview = false,           -- Show preview pane
+        winblend = 10             -- Window transparency (0-100)
+      }
+    }
+  })
+<
+
+BUFFER NAVIGATION ~
+When using Telescope with multiple buffers:
+- Yank/Delete: Returns to original position after operation
+- Change/Visual: Opens target in split or switches to existing window
+- Line numbers: Fixed-width formatting for better alignment
+
+DEPENDENCIES ~
+For cross-buffer operations, install:
+- telescope.nvim
+- plenary.nvim (required by telescope)
 
 ==============================================================================
 TIPS & TRICKS                                                    *beam-tips*

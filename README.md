@@ -6,6 +6,10 @@
 
 `beam.nvim` makes it possible to perform text operations (yank, delete, change, visual selection) anywhere in your file using search, while moving only when needed.
 
+Without beam: `[1]/ [2]<type search term> [3]<enter> [4]<text object (cib)>`
+
+With beam***: `[1]/<text objet (,cib)> [2]<type search term> [3]<enter>`
+
 <div align="center">
 
 [![Neovim](https://img.shields.io/badge/Neovim-0.8+-green.svg?style=flat-square&logo=neovim)](https://neovim.io)
@@ -191,6 +195,8 @@ This gives you instant access to 100+ combinations like:
 
 When `smart_highlighting = true`, beam constrains search results based on the text object you're using. This means when you search with delimiter-based text objects, only matches within those delimiters are highlighted.
 
+**Note**: Smart highlighting only works with native Vim search (`/`). It is not available when using Telescope.
+
 #### Example
 ```vim
 " Without smart highlighting:
@@ -256,11 +262,25 @@ require('beam').setup({
   clear_highlight_delay = 500,       -- Delay before clearing highlight
   
   -- Advanced features
-  cross_buffer = false,              -- Enable cross-buffer operations (experimental)
+  cross_buffer = {
+    enabled = false,                 -- Enable cross-buffer operations
+    fuzzy_finder = 'telescope'       -- Fuzzy finder for cross-buffer (required when enabled)
+  },
   auto_discover_text_objects = true, -- Discover text objects from all plugins
   show_discovery_notification = true,-- Notify about discovered objects
   excluded_text_objects = {},       -- List of text object keys to exclude (e.g., {'q', 'z'})
   excluded_motions = {},             -- List of motion keys to exclude (e.g., {'Q', 'R'})
+  smart_highlighting = false,        -- Context-aware search highlighting
+  
+  -- Experimental features
+  experimental = {
+    telescope_single_buffer = {
+      enabled = false,               -- Use Telescope for single buffer search (optional)
+      theme = 'dropdown',            -- Theme: 'dropdown', 'cursor', 'ivy'
+      preview = false,               -- Show preview pane
+      winblend = 10                  -- Window transparency (0-100)
+    }
+  }
   
   -- Custom text objects (in addition to discovered ones)
   enable_default_text_objects = true, -- Enable beam's built-in text objects
@@ -315,6 +335,53 @@ require('beam').register_text_object('g', {
 
 **Built-in Text Objects:**
 - `im`/`am` - Inside/around markdown code block (triple backticks) - enabled with `enable_default_text_objects = true`
+
+## Telescope Integration
+
+beam.nvim integrates with [Telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) to provide a powerful fuzzy finder interface for cross-buffer operations.
+
+### How It Works
+
+- **Single Buffer (default)**: Uses native Vim search (`/`) for fast, lightweight operations
+- **Multiple Buffers**: Automatically uses Telescope when `cross_buffer.enabled = true` and multiple buffers are open
+- **Optional Single Buffer Telescope**: Can be enabled for enhanced single-buffer search experience
+
+### Configuration
+
+```lua
+require('beam').setup({
+  -- Cross-buffer configuration
+  cross_buffer = {
+    enabled = true,                  -- Enable cross-buffer operations
+    fuzzy_finder = 'telescope'       -- Currently only 'telescope' is supported
+  },
+  
+  -- Optional: Use Telescope even for single buffer
+  experimental = {
+    telescope_single_buffer = {
+      enabled = false,               -- Set to true to always use Telescope
+      theme = 'dropdown',            -- 'dropdown', 'cursor', or 'ivy'
+      preview = false,               -- Show preview pane
+      winblend = 10                  -- Window transparency (0-100)
+    }
+  }
+})
+```
+
+### Behavior
+
+1. **With One Buffer Open**:
+   - Uses normal `/` search (unless `telescope_single_buffer.enabled = true`)
+   - Fast and lightweight
+
+2. **With Multiple Buffers Open** (and `cross_buffer.enabled = true`):
+   - Automatically uses Telescope
+   - Shows all matches across all buffers
+   - Properly handles buffer navigation (opens splits for change/visual operations)
+
+3. **Smart Buffer Navigation**:
+   - **Yank/Delete**: Returns cursor to original position
+   - **Change/Visual**: Opens target buffer in split if needed, or switches to existing window
 
 ## Integration with Other Plugins
 

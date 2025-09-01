@@ -64,7 +64,14 @@ describe('beam.nvim cross-buffer operations', function()
 
     it('enables cross-buffer config option', function()
       local config = beam.get_config()
-      assert.is_true(config.cross_buffer)
+      -- cross_buffer is now a table with enabled field for backward compatibility
+      if type(config.cross_buffer) == 'table' then
+        assert.is_true(config.cross_buffer.enabled)
+        assert.equals('telescope', config.cross_buffer.fuzzy_finder)
+      else
+        -- Legacy boolean format
+        assert.is_true(config.cross_buffer)
+      end
     end)
 
     it('yanks from another buffer and returns', function()

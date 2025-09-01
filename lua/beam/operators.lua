@@ -199,7 +199,7 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
   local cfg = config.current
 
   -- Cross-buffer search if enabled
-  if cfg.cross_buffer then
+  if cfg.cross_buffer and cfg.cross_buffer.enabled then
     local start_buf = vim.api.nvim_get_current_buf()
     local start_pos = vim.api.nvim_win_get_cursor(0)
 
@@ -394,23 +394,99 @@ function M.create_setup_function(action, save_pos)
   end
 end
 
--- Override for experimental Telescope integration
+-- Helper to check if multiple buffers are open
+M.has_multiple_buffers = function()
+  local count = 0
+  local buffers = vim.fn.getbufinfo({ buflisted = 1 })
+  for _, buf in ipairs(buffers) do
+    if vim.api.nvim_buf_is_loaded(buf.bufnr) then
+      count = count + 1
+      if count > 1 then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+-- Helper to determine if we should use Telescope
+local function should_use_telescope_immediately(cfg)
+  -- Check if we have multiple buffers
+  local multiple_buffers = M.has_multiple_buffers()
+
+  -- Use Telescope if:
+  -- 1. Single buffer Telescope is explicitly enabled (regardless of buffer count), OR
+  -- 2. Cross-buffer is enabled AND we have multiple buffers
+
+  if
+    cfg.experimental
+    and cfg.experimental.telescope_single_buffer
+    and cfg.experimental.telescope_single_buffer.enabled
+  then
+    -- Single buffer Telescope explicitly enabled
+    return true
+  end
+
+  if cfg.cross_buffer and cfg.cross_buffer.enabled and multiple_buffers then
+    -- Cross-buffer enabled and we have multiple buffers
+    return true
+  end
+
+  return false
+end
+
+-- Create operator setup functions with Telescope support
 local original_yank_setup = M.create_setup_function('yank', true)
+local original_delete_setup = M.create_setup_function('delete', true)
+local original_change_setup = M.create_setup_function('change', false)
+local original_visual_setup = M.create_setup_function('visual', false)
+
 M.BeamYankSearchSetup = function(textobj)
   local cfg = config.current
-  -- Check if we should use Telescope for cross-buffer yank
-  if cfg.cross_buffer and cfg.experimental and cfg.experimental.telescope_integration then
-    local ok, telescope_cross = pcall(require, 'beam.telescope_cross_buffer')
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
     if ok then
-      telescope_cross.search_and_yank(textobj)
+      telescope.search_and_yank(textobj)
       return '' -- Don't trigger normal search
     end
   end
-  -- Fall back to normal behavior
   return original_yank_setup(textobj)
 end
-M.BeamDeleteSearchSetup = M.create_setup_function('delete', true)
-M.BeamChangeSearchSetup = M.create_setup_function('change', false)
-M.BeamVisualSearchSetup = M.create_setup_function('visual', false)
+
+M.BeamDeleteSearchSetup = function(textobj)
+  local cfg = config.current
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
+    if ok then
+      telescope.search_and_delete(textobj)
+      return '' -- Don't trigger normal search
+    end
+  end
+  return original_delete_setup(textobj)
+end
+
+M.BeamChangeSearchSetup = function(textobj)
+  local cfg = config.current
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
+    if ok then
+      telescope.search_and_change(textobj)
+      return '' -- Don't trigger normal search
+    end
+  end
+  return original_change_setup(textobj)
+end
+
+M.BeamVisualSearchSetup = function(textobj)
+  local cfg = config.current
+  if should_use_telescope_immediately(cfg) then
+    local ok, telescope = pcall(require, 'beam.telescope')
+    if ok then
+      telescope.search_and_visual(textobj)
+      return '' -- Don't trigger normal search
+    end
+  end
+  return original_visual_setup(textobj)
+end
 
 return M
