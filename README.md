@@ -29,7 +29,6 @@ With beam***: `[1]/<text objet (,cib)> [2]<type search term> [3]<enter>`
 ,Y              " Search & yank entire line
 ```
 
-
 ## Installation
 
 ### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
