@@ -34,11 +34,26 @@ With beam***: `[1]/<text objet (,cib)> [2]<type search term> [3]<enter>`
 
 ### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
 
+#### Full setup (with Telescope for cross-buffer search)
+```lua
+{
+  "Piotr1215/beam.nvim",
+  dependencies = {
+    "nvim-telescope/telescope.nvim",
+    "nvim-lua/plenary.nvim",  -- Required by telescope
+  },
+  config = function()
+    require("beam").setup()  -- Uses default prefix ','
+  end,
+}
+```
+
+#### Minimal setup (without cross-buffer search)
 ```lua
 {
   "Piotr1215/beam.nvim",
   config = function()
-    require("beam").setup()  -- Uses default prefix ','
+    require("beam").setup()  -- Single buffer operations only
   end,
 }
 ```
@@ -48,6 +63,11 @@ With beam***: `[1]/<text objet (,cib)> [2]<type search term> [3]<enter>`
 ```lua
 use {
   "Piotr1215/beam.nvim",
+  requires = {
+    -- Optional but recommended for cross-buffer search
+    "nvim-telescope/telescope.nvim",
+    "nvim-lua/plenary.nvim",
+  },
   config = function()
     require("beam").setup()  -- Uses default prefix ','
   end,
@@ -69,7 +89,7 @@ use {
 - **Line Operators** - Special `Y`, `D`, `C`, `V` operators for entire lines
 - **Statusline Integration** - See pending operations in your statusline
 - **Custom Text Objects** - Define your own text objects
-- **Zero Dependencies** - Pure Lua implementation, no external requirements
+- **Telescope Integration** - Optional fuzzy finder for powerful cross-buffer search
 
 ## Usage
 
