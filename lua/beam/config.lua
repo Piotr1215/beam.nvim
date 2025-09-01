@@ -15,6 +15,7 @@ M.defaults = {
   experimental = {
     dot_repeat = false,
     count_support = false,
+    telescope_integration = false, -- Use Telescope for cross-buffer search
   },
 }
 

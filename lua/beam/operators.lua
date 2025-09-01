@@ -394,7 +394,21 @@ function M.create_setup_function(action, save_pos)
   end
 end
 
-M.BeamYankSearchSetup = M.create_setup_function('yank', true)
+-- Override for experimental Telescope integration
+local original_yank_setup = M.create_setup_function('yank', true)
+M.BeamYankSearchSetup = function(textobj)
+  local cfg = config.current
+  -- Check if we should use Telescope for cross-buffer yank
+  if cfg.cross_buffer and cfg.experimental and cfg.experimental.telescope_integration then
+    local ok, telescope_cross = pcall(require, 'beam.telescope_cross_buffer')
+    if ok then
+      telescope_cross.search_and_yank(textobj)
+      return '' -- Don't trigger normal search
+    end
+  end
+  -- Fall back to normal behavior
+  return original_yank_setup(textobj)
+end
 M.BeamDeleteSearchSetup = M.create_setup_function('delete', true)
 M.BeamChangeSearchSetup = M.create_setup_function('change', false)
 M.BeamVisualSearchSetup = M.create_setup_function('visual', false)
