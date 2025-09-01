@@ -170,6 +170,8 @@ When `auto_discover_text_objects = true`, beam automatically finds and uses text
 
 ## Configuration
 
+> **Note**: The source of truth for all configuration options is [`lua/beam/config.lua`](lua/beam/config.lua). The examples below show the default values.
+
 ### Default Setup
 
 ```lua
@@ -183,6 +185,7 @@ require('beam').setup({
     fuzzy_finder = 'telescope',      -- Fuzzy finder (telescope required when enabled)
     include_hidden = false,          -- Include hidden buffers
   },
+  enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
   auto_discover_text_objects = true, -- Auto-discover all available text objects
   show_discovery_notification = true,-- Show notification about discovered objects
   excluded_text_objects = {},       -- Exclude specific text objects (e.g., {'q', 'z'})
@@ -359,11 +362,13 @@ require('beam').setup({
     include_hidden = false,          -- Include hidden buffers in search (default: only visible)
   },
   
-  -- Text object discovery
+  -- Text object configuration
+  enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
   auto_discover_text_objects = true, -- Discover text objects from all plugins
   show_discovery_notification = true,-- Notify about discovered objects
   excluded_text_objects = {},       -- List of text object keys to exclude (e.g., {'q', 'z'})
   excluded_motions = {},             -- List of motion keys to exclude (e.g., {'Q', 'R'})
+  custom_text_objects = {},         -- Define custom text objects (key = description pairs)
   
   -- Search behavior
   smart_highlighting = false,        -- Context-aware search highlighting (native search only)
@@ -375,13 +380,9 @@ require('beam').setup({
       theme = 'dropdown',            -- Theme: 'dropdown', 'cursor', 'ivy'
       preview = false,               -- Show preview pane
       winblend = 10                  -- Window transparency (0-100)
-    }
-  }
-  
-  -- Custom text objects (in addition to discovered ones)
-  enable_default_text_objects = true, -- Enable beam's built-in text objects
-  custom_text_objects = {
-    -- Your custom text objects here
+    },
+    dot_repeat = false,              -- Enable dot repeat support (experimental)
+    count_support = false            -- Enable count support (experimental)
   }
 })
 ```

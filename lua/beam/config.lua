@@ -1,5 +1,7 @@
 local M = {}
 
+-- Default configuration for beam.nvim
+-- This is the source of truth for all available options
 M.defaults = {
   prefix = ',',
   visual_feedback_duration = 150,
@@ -10,6 +12,7 @@ M.defaults = {
     fuzzy_finder = 'telescope', -- Fuzzy finder to use: 'telescope' (future: 'fzf-lua', 'mini.pick')
     include_hidden = false, -- Include hidden buffers in search (default: only visible buffers)
   },
+  enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
   custom_text_objects = {},
   auto_discover_text_objects = false, -- Auto-discover and register all available text objects
   show_discovery_notification = false, -- Show notification about discovered text objects

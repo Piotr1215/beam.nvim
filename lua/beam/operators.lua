@@ -209,11 +209,11 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
     if found == 0 then
       -- Search other buffers
       local buffers = vim.fn.getbufinfo({ buflisted = 1 })
-      
+
       -- Build a set of visible buffers if include_hidden is false
       local visible_buffers = nil
       local include_hidden = cfg.cross_buffer.include_hidden
-      if include_hidden == false or include_hidden == "false" then
+      if include_hidden == false or include_hidden == 'false' then
         visible_buffers = {}
         for _, win in ipairs(vim.api.nvim_list_wins()) do
           local bufnr = vim.api.nvim_win_get_buf(win)
@@ -223,53 +223,50 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
 
       for _, buf in ipairs(buffers) do
         -- Skip hidden buffers if include_hidden is false
-        if visible_buffers and not visible_buffers[buf.bufnr] then
-          goto continue
-        end
-        
-        if
-          buf.bufnr ~= start_buf
-          and vim.api.nvim_buf_is_valid(buf.bufnr)
-          and vim.api.nvim_buf_is_loaded(buf.bufnr)
-        then
-          -- For yank/delete, we need to temporarily switch to execute the operation
-          -- For change/visual, we want to open/switch to the buffer
+        if not (visible_buffers and not visible_buffers[buf.bufnr]) then
+          if
+            buf.bufnr ~= start_buf
+            and vim.api.nvim_buf_is_valid(buf.bufnr)
+            and vim.api.nvim_buf_is_loaded(buf.bufnr)
+          then
+            -- For yank/delete, we need to temporarily switch to execute the operation
+            -- For change/visual, we want to open/switch to the buffer
 
-          if pending.action == 'change' or pending.action == 'visual' then
-            -- Check if buffer is already visible in a window
-            local win_id = vim.fn.bufwinnr(buf.bufnr)
-
-            if win_id > 0 then
-              -- Buffer is visible, switch to that window
-              vim.cmd(win_id .. 'wincmd w')
-            else
-              -- Open in a split for editing
-              vim.cmd('split | buffer ' .. buf.bufnr)
-            end
-          else
-            -- For yank/delete, just temporarily switch in current window
-            -- We'll restore after the operation
-            vim.cmd('buffer ' .. buf.bufnr)
-          end
-
-          vim.api.nvim_win_set_cursor(0, { 1, 0 })
-
-          -- Search in this buffer
-          found = vim.fn.search(pattern, 'c')
-          if found > 0 then
-            break
-          else
-            -- Didn't find in this buffer, restore
             if pending.action == 'change' or pending.action == 'visual' then
-              -- Close the split we just opened
-              vim.cmd('close')
+              -- Check if buffer is already visible in a window
+              local win_id = vim.fn.bufwinnr(buf.bufnr)
+
+              if win_id > 0 then
+                -- Buffer is visible, switch to that window
+                vim.cmd(win_id .. 'wincmd w')
+              else
+                -- Open in a split for editing
+                vim.cmd('split | buffer ' .. buf.bufnr)
+              end
             else
-              -- Switch back to original buffer
-              vim.cmd('buffer ' .. start_buf)
+              -- For yank/delete, just temporarily switch in current window
+              -- We'll restore after the operation
+              vim.cmd('buffer ' .. buf.bufnr)
+            end
+
+            vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+            -- Search in this buffer
+            found = vim.fn.search(pattern, 'c')
+            if found > 0 then
+              break
+            else
+              -- Didn't find in this buffer, restore
+              if pending.action == 'change' or pending.action == 'visual' then
+                -- Close the split we just opened
+                vim.cmd('close')
+              else
+                -- Switch back to original buffer
+                vim.cmd('buffer ' .. start_buf)
+              end
             end
           end
         end
-        ::continue::
       end
 
       if found == 0 then
@@ -416,17 +413,17 @@ M.has_multiple_buffers = function()
   local cfg = config.current
   local count = 0
   local buffers = vim.fn.getbufinfo({ buflisted = 1 })
-  
+
   -- If include_hidden is false, only count visible buffers
   -- Handle both boolean false and string "false"
   local include_hidden = cfg.cross_buffer and cfg.cross_buffer.include_hidden
-  if cfg.cross_buffer and (include_hidden == false or include_hidden == "false") then
+  if cfg.cross_buffer and (include_hidden == false or include_hidden == 'false') then
     local visible_buffers = {}
     for _, win in ipairs(vim.api.nvim_list_wins()) do
       local bufnr = vim.api.nvim_win_get_buf(win)
       visible_buffers[bufnr] = true
     end
-    
+
     for _, buf in ipairs(buffers) do
       if vim.api.nvim_buf_is_loaded(buf.bufnr) and visible_buffers[buf.bufnr] then
         count = count + 1
@@ -446,7 +443,7 @@ M.has_multiple_buffers = function()
       end
     end
   end
-  
+
   return false
 end
 

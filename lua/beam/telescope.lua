@@ -67,7 +67,7 @@ local function collect_buffer_lines()
   if cfg.cross_buffer and cfg.cross_buffer.enabled then
     -- Cross-buffer: collect from all loaded buffers
     local buffers = vim.fn.getbufinfo({ buflisted = 1 })
-    
+
     -- Build a set of visible buffers
     local visible_buffers = {}
     for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -78,38 +78,35 @@ local function collect_buffer_lines()
     for _, buf in ipairs(buffers) do
       if vim.api.nvim_buf_is_loaded(buf.bufnr) then
         local is_visible = visible_buffers[buf.bufnr] or false
-        
+
         -- Skip hidden buffers if include_hidden is false
         -- Handle both boolean false and string "false"
         local include_hidden = cfg.cross_buffer.include_hidden
-        if (include_hidden == false or include_hidden == "false") and not is_visible then
-          goto continue
-        end
-        
-        local lines = vim.api.nvim_buf_get_lines(buf.bufnr, 0, -1, false)
-        local bufname = vim.fn.fnamemodify(buf.name, ':t') or '[No Name]'
-        local indicator = is_visible and '●' or '○'  -- ● for visible, ○ for hidden
+        if not ((include_hidden == false or include_hidden == 'false') and not is_visible) then
+          local lines = vim.api.nvim_buf_get_lines(buf.bufnr, 0, -1, false)
+          local bufname = vim.fn.fnamemodify(buf.name, ':t') or '[No Name]'
+          local indicator = is_visible and '●' or '○' -- ● for visible, ○ for hidden
 
-        for lnum, line in ipairs(lines) do
-          if line ~= '' then -- Skip empty lines
-            table.insert(items, {
-              bufnr = buf.bufnr,
-              bufname = bufname,
-              lnum = lnum,
-              line = line,
-              is_visible = is_visible,
-              display = string.format('%s %s:%4d: %s', indicator, bufname, lnum, line),
-            })
+          for lnum, line in ipairs(lines) do
+            if line ~= '' then -- Skip empty lines
+              table.insert(items, {
+                bufnr = buf.bufnr,
+                bufname = bufname,
+                lnum = lnum,
+                line = line,
+                is_visible = is_visible,
+                display = string.format('%s %s:%4d: %s', indicator, bufname, lnum, line),
+              })
+            end
           end
         end
       end
-      ::continue::
     end
-    
+
     -- Sort items: visible buffers first, then by buffer name and line number
     table.sort(items, function(a, b)
       if a.is_visible ~= b.is_visible then
-        return a.is_visible  -- visible buffers come first
+        return a.is_visible -- visible buffers come first
       end
       if a.bufname ~= b.bufname then
         return a.bufname < b.bufname
@@ -150,7 +147,12 @@ local function execute_operator(selection, operator, textobj, start_buf, start_p
 
   if target_buf ~= current_buf then
     -- For change/visual operations (including line versions), we need to open the buffer properly
-    if operator == 'change' or operator == 'visual' or operator == 'changeline' or operator == 'visualline' then
+    if
+      operator == 'change'
+      or operator == 'visual'
+      or operator == 'changeline'
+      or operator == 'visualline'
+    then
       -- Check if buffer is already visible in a window
       local win_id = vim.fn.bufwinnr(target_buf)
 
@@ -174,7 +176,7 @@ local function execute_operator(selection, operator, textobj, start_buf, start_p
   if textobj == 'im' or textobj == 'am' then
     local cursor_line = selection.value.lnum
     local last_line = vim.api.nvim_buf_line_count(0)
-    
+
     -- Search backward for opening ```
     local start_line = nil
     for line = cursor_line, 1, -1 do
@@ -184,7 +186,7 @@ local function execute_operator(selection, operator, textobj, start_buf, start_p
         break
       end
     end
-    
+
     -- Search forward for closing ```
     local end_line = nil
     if start_line then
@@ -196,7 +198,7 @@ local function execute_operator(selection, operator, textobj, start_buf, start_p
         end
       end
     end
-    
+
     if not start_line or not end_line then
       vim.notify('No markdown code block found at target', vim.log.levels.WARN)
       if target_buf ~= start_buf then
@@ -205,20 +207,20 @@ local function execute_operator(selection, operator, textobj, start_buf, start_p
       end
       return
     end
-    
+
     -- Adjust for inside vs around
     local visual_start = start_line
     local visual_end = end_line
-    
+
     if textobj == 'im' then
       -- Inside: exclude backticks
       visual_start = start_line + 1
       visual_end = end_line - 1
     end
-    
+
     -- Set cursor to start of block
     vim.api.nvim_win_set_cursor(0, { visual_start, 0 })
-    
+
     -- Execute operation based on type
     if operator == 'yank' then
       vim.cmd('normal! V')
@@ -244,7 +246,7 @@ local function execute_operator(selection, operator, textobj, start_buf, start_p
       vim.api.nvim_win_set_cursor(0, { visual_end, 0 })
       -- Stay in visual mode at target
     end
-    
+
     return -- Don't continue with normal text object handling
   end
 
