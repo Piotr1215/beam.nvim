@@ -3,6 +3,9 @@ describe('beam.nvim telescope settings layers', function()
   local config = require('beam.config')
   local operators = require('beam.operators')
 
+  -- Counter for unique buffer names
+  local buffer_counter = 0
+
   -- Helper to reset config between tests
   local function reset_config()
     config.current = vim.tbl_deep_extend('force', {}, config.defaults)
@@ -18,19 +21,28 @@ describe('beam.nvim telescope settings layers', function()
     end
 
     local buffers = {}
-    local wins = {}
+    local visible_wins = {}
+    buffer_counter = buffer_counter + 1
+
+    -- First close all windows except current
+    vim.cmd('only')
 
     -- Create visible buffers (in windows)
     for i = 1, visible_count do
       local buf = vim.api.nvim_create_buf(true, false)
-      vim.api.nvim_buf_set_name(buf, 'visible_' .. i .. '.txt')
+      vim.api.nvim_buf_set_name(buf, 'visible_' .. buffer_counter .. '_' .. i .. '.txt')
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'visible buffer ' .. i })
 
       if i == 1 then
+        -- Use the current window for the first buffer
         vim.api.nvim_set_current_buf(buf)
+        table.insert(visible_wins, vim.api.nvim_get_current_win())
       else
+        -- Create a new split window for each additional visible buffer
         vim.cmd('split')
-        vim.api.nvim_set_current_buf(buf)
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, buf)
+        table.insert(visible_wins, win)
       end
 
       table.insert(buffers, buf)
@@ -39,19 +51,21 @@ describe('beam.nvim telescope settings layers', function()
     -- Create hidden buffers (no windows)
     for i = 1, hidden_count do
       local buf = vim.api.nvim_create_buf(true, false)
-      vim.api.nvim_buf_set_name(buf, 'hidden_' .. i .. '.txt')
+      vim.api.nvim_buf_set_name(buf, 'hidden_' .. buffer_counter .. '_' .. i .. '.txt')
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'hidden buffer ' .. i })
       table.insert(buffers, buf)
     end
 
-    -- Close extra windows, keeping only the first
-    vim.cmd('only')
+    -- Return to the first window to have a consistent state
+    if #visible_wins > 0 then
+      vim.api.nvim_set_current_win(visible_wins[1])
+    end
 
-    return buffers
+    return buffers, visible_wins
   end
 
   describe('cross_buffer settings', function()
-    afterEach(function()
+    after_each(function()
       reset_config()
     end)
 
@@ -100,7 +114,7 @@ describe('beam.nvim telescope settings layers', function()
   end)
 
   describe('telescope_single_buffer experimental settings', function()
-    afterEach(function()
+    after_each(function()
       reset_config()
     end)
 
@@ -130,7 +144,7 @@ describe('beam.nvim telescope settings layers', function()
   end)
 
   describe('has_multiple_buffers with include_hidden settings', function()
-    afterEach(function()
+    after_each(function()
       reset_config()
       -- Clean up buffers
       for _, buf in ipairs(vim.api.nvim_list_bufs()) do
@@ -227,7 +241,7 @@ describe('beam.nvim telescope settings layers', function()
       return false
     end
 
-    afterEach(function()
+    after_each(function()
       reset_config()
       -- Clean up buffers
       for _, buf in ipairs(vim.api.nvim_list_bufs()) do
@@ -330,7 +344,7 @@ describe('beam.nvim telescope settings layers', function()
   end)
 
   describe('configuration precedence and interactions', function()
-    afterEach(function()
+    after_each(function()
       reset_config()
     end)
 

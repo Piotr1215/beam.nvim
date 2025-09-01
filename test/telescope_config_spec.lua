@@ -16,6 +16,9 @@ describe('beam.nvim telescope configuration', function()
 
   describe('multiple buffer detection', function()
     it('detects single buffer correctly', function()
+      -- Setup beam with cross_buffer enabled
+      require('beam').setup({ cross_buffer = { enabled = true } })
+
       -- Close all buffers except current
       vim.cmd('silent! %bdelete!')
       vim.cmd('enew')
@@ -24,15 +27,25 @@ describe('beam.nvim telescope configuration', function()
     end)
 
     it('detects multiple buffers correctly', function()
-      -- Create multiple buffers with content to ensure they're loaded
+      -- Setup beam with cross_buffer enabled
+      require('beam').setup({ cross_buffer = { enabled = true } })
+
+      -- Close all windows first
+      vim.cmd('only')
+
+      -- Create multiple buffers with content in visible windows
       vim.cmd('enew')
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'buffer 1' })
+
+      -- Create a split window with another buffer
+      vim.cmd('split')
       vim.cmd('enew')
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'buffer 2' })
 
       assert.is_true(operators.has_multiple_buffers())
 
       -- Clean up
+      vim.cmd('only')
       vim.cmd('silent! %bdelete!')
     end)
   end)

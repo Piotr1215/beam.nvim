@@ -166,9 +166,10 @@ M.BeamSearchOperator = function(type)
 end
 
 M.BeamSearchOperatorPending = {}
+_G.BeamSearchOperatorPending = nil
 
 M.BeamExecuteSearchOperator = function()
-  local pending = M.BeamSearchOperatorPending
+  local pending = _G.BeamSearchOperatorPending or M.BeamSearchOperatorPending
   if not pending or not pending.action or not pending.textobj then
     vim.cmd('silent! autocmd! BeamSearchOperatorExecute')
     return
@@ -184,6 +185,7 @@ M.BeamExecuteSearchOperator = function()
   -- If no pattern, user probably pressed Escape or cleared the search
   if not pattern or pattern == '' then
     M.BeamSearchOperatorPending = {}
+    _G.BeamSearchOperatorPending = nil
     vim.cmd('silent! autocmd! BeamSearchOperatorExecute')
     vim.g.beam_search_operator_indicator = nil
     vim.cmd('redrawstatus')
@@ -275,6 +277,7 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
           vim.api.nvim_set_current_buf(start_buf)
         end
         M.BeamSearchOperatorPending = {}
+        _G.BeamSearchOperatorPending = nil
         vim.cmd('silent! autocmd! BeamSearchOperatorExecute')
         vim.g.beam_search_operator_indicator = nil
         vim.cmd('redrawstatus')
@@ -306,6 +309,7 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
     if found == 0 then
       -- Pattern not found in current buffer
       M.BeamSearchOperatorPending = {}
+      _G.BeamSearchOperatorPending = nil
       vim.g.beam_search_operator_indicator = nil
       vim.cmd('redrawstatus')
       return
@@ -319,6 +323,7 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
   vim.g.beam_search_operator_action = pending.action
 
   M.BeamSearchOperatorPending = {}
+  _G.BeamSearchOperatorPending = nil
 
   -- For change with single-letter motions, execute directly without operator function
   if pending.action == 'change' and #pending.textobj == 1 then
@@ -411,13 +416,19 @@ end
 -- Helper to check if multiple buffers are open
 M.has_multiple_buffers = function()
   local cfg = config.current
+
+  -- If cross_buffer is not enabled, return false
+  if not cfg.cross_buffer or not cfg.cross_buffer.enabled then
+    return false
+  end
+
   local count = 0
   local buffers = vim.fn.getbufinfo({ buflisted = 1 })
 
   -- If include_hidden is false, only count visible buffers
   -- Handle both boolean false and string "false"
-  local include_hidden = cfg.cross_buffer and cfg.cross_buffer.include_hidden
-  if cfg.cross_buffer and (include_hidden == false or include_hidden == 'false') then
+  local include_hidden = cfg.cross_buffer.include_hidden
+  if include_hidden == false or include_hidden == 'false' then
     local visible_buffers = {}
     for _, win in ipairs(vim.api.nvim_list_wins()) do
       local bufnr = vim.api.nvim_win_get_buf(win)

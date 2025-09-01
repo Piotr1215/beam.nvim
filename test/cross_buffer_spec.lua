@@ -15,10 +15,21 @@ describe('beam.nvim cross-buffer operations', function()
     -- Enable test mode for synchronous execution
     vim.g.beam_test_mode = true
 
+    -- Close all windows except current
+    vim.cmd('only')
+
     -- Create test buffers
     buf1 = vim.api.nvim_get_current_buf()
     buf2 = vim.api.nvim_create_buf(true, false) -- listed buffer
     buf3 = vim.api.nvim_create_buf(true, false) -- listed buffer
+
+    -- Make buf2 visible in a split window
+    vim.cmd('split')
+    vim.api.nvim_set_current_buf(buf2)
+
+    -- Return to buf1
+    vim.cmd('wincmd w')
+    vim.api.nvim_set_current_buf(buf1)
   end)
 
   after_each(function()
@@ -86,7 +97,7 @@ describe('beam.nvim cross-buffer operations', function()
       local start_pos = vim.fn.getpos('.')
 
       -- Setup yank operation
-      operators.BeamSearchOperatorPending = {
+      _G.BeamSearchOperatorPending = {
         action = 'yank',
         textobj = 'i"',
         saved_pos_for_yank = start_pos,
@@ -94,7 +105,7 @@ describe('beam.nvim cross-buffer operations', function()
       }
 
       vim.fn.setreg('/', 'yank this')
-      operators.BeamExecuteSearchOperator()
+      _G.BeamExecuteSearchOperator()
 
       -- Should have yanked the text
       assert.equals('yank this', vim.fn.getreg('"'))
@@ -110,7 +121,7 @@ describe('beam.nvim cross-buffer operations', function()
       local start_buf = vim.api.nvim_get_current_buf()
 
       -- Setup change operation
-      operators.BeamSearchOperatorPending = {
+      _G.BeamSearchOperatorPending = {
         action = 'change',
         textobj = 'i"',
         saved_pos_for_yank = nil,
@@ -118,7 +129,7 @@ describe('beam.nvim cross-buffer operations', function()
       }
 
       vim.fn.setreg('/', 'this text')
-      operators.BeamExecuteSearchOperator()
+      _G.BeamExecuteSearchOperator()
 
       -- Should stay in target buffer for change
       assert.are_not.equals(start_buf, vim.api.nvim_get_current_buf())

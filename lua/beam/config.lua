@@ -86,6 +86,7 @@ function M.setup(opts)
     M.current.cross_buffer = {
       enabled = M.current.cross_buffer,
       fuzzy_finder = 'telescope',
+      include_hidden = false, -- Set default value explicitly
     }
   end
 
