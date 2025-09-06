@@ -290,6 +290,18 @@ This gives you instant access to 100+ combinations like:
 - `,ciq` - Search & change any quote type
 - `,dL` - Search & delete to URL
 
+### BeamScope (Visual Text Object Selection)
+
+BeamScope provides a visual interface for selecting text objects when multiple instances exist in a buffer. Instead of searching, it shows all instances and lets you pick one.
+
+When enabled (default), BeamScope automatically activates for delimited text objects like quotes and brackets. It displays all instances in a side window where you can:
+- Navigate with `j`/`k` or `Ctrl-n`/`Ctrl-p`
+- Search to filter with `/`
+- Select with `Enter`
+- Cancel with `Esc` or `q`
+
+**Note**: BeamScope is incompatible with cross-buffer operations. When `cross_buffer.enabled = true`, BeamScope is automatically disabled.
+
 ### Smart Highlighting (Context-Aware Search)
 
 When `smart_highlighting = true`, beam constrains search results based on the text object you're using. This means when you search with delimiter-based text objects, only matches within those delimiters are highlighted.

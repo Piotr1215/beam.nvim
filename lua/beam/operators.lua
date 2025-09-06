@@ -93,9 +93,10 @@ M.BeamSearchOperator = function(type)
       vim.cmd('sleep ' .. feedback_duration .. 'm')
       vim.cmd('normal! d')
     elseif action == 'change' then
-      -- Execute the change operation with the actual motion/text object
-      -- Use feedkeys to properly enter insert mode
-      vim.api.nvim_feedkeys('c' .. textobj, 'n', false)
+      -- Delete content, position cursor, then enter insert mode
+      vim.cmd('normal! v' .. textobj .. 'd')
+      vim.cmd('normal a')
+      vim.cmd('startinsert')
     elseif action == 'visual' then
       vim.cmd('normal v' .. textobj)
     elseif action == 'yankline' then
@@ -325,23 +326,17 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
   M.BeamSearchOperatorPending = {}
   _G.BeamSearchOperatorPending = nil
 
-  -- For change with single-letter motions, execute directly without operator function
-  if pending.action == 'change' and #pending.textobj == 1 then
-    -- Direct execution for motion-based change using feedkeys with 'm' flag for remap
-    vim.api.nvim_feedkeys('c' .. pending.textobj, 'm', false)
+  -- Check if we're in test mode (synchronous execution needed)
+  if vim.g.beam_test_mode then
+    -- Direct call for tests
+    M.BeamSearchOperator('line')
   else
-    -- Check if we're in test mode (synchronous execution needed)
-    if vim.g.beam_test_mode then
-      -- Direct call for tests
-      M.BeamSearchOperator('line')
-    else
-      -- Use operator function for everything else
-      _G.BeamSearchOperatorWrapper = function(type)
-        return M.BeamSearchOperator(type)
-      end
-      vim.opt.operatorfunc = 'v:lua.BeamSearchOperatorWrapper'
-      vim.api.nvim_feedkeys('g@l', 'n', false)
+    -- Use operator function for everything else
+    _G.BeamSearchOperatorWrapper = function(type)
+      return M.BeamSearchOperator(type)
     end
+    vim.opt.operatorfunc = 'v:lua.BeamSearchOperatorWrapper'
+    vim.api.nvim_feedkeys('g@l', 'n', false)
   end
 end
 
@@ -492,6 +487,14 @@ local original_visual_setup = M.create_setup_function('visual', false)
 
 M.BeamYankSearchSetup = function(textobj)
   local cfg = config.current
+
+  -- Check if BeamScope should be used for this text object
+  local scope = require('beam.scope')
+  if scope.should_use_scope(textobj) then
+    scope.beam_scope('yank', textobj)
+    return '' -- Don't trigger normal search
+  end
+
   if should_use_telescope_immediately(cfg) then
     local ok, telescope = pcall(require, 'beam.telescope')
     if ok then
@@ -504,6 +507,14 @@ end
 
 M.BeamDeleteSearchSetup = function(textobj)
   local cfg = config.current
+
+  -- Check if BeamScope should be used for this text object
+  local scope = require('beam.scope')
+  if scope.should_use_scope(textobj) then
+    scope.beam_scope('delete', textobj)
+    return '' -- Don't trigger normal search
+  end
+
   if should_use_telescope_immediately(cfg) then
     local ok, telescope = pcall(require, 'beam.telescope')
     if ok then
@@ -516,6 +527,14 @@ end
 
 M.BeamChangeSearchSetup = function(textobj)
   local cfg = config.current
+
+  -- Check if BeamScope should be used for this text object
+  local scope = require('beam.scope')
+  if scope.should_use_scope(textobj) then
+    scope.beam_scope('change', textobj)
+    return '' -- Don't trigger normal search
+  end
+
   if should_use_telescope_immediately(cfg) then
     local ok, telescope = pcall(require, 'beam.telescope')
     if ok then
@@ -528,6 +547,14 @@ end
 
 M.BeamVisualSearchSetup = function(textobj)
   local cfg = config.current
+
+  -- Check if BeamScope should be used for this text object
+  local scope = require('beam.scope')
+  if scope.should_use_scope(textobj) then
+    scope.beam_scope('visual', textobj)
+    return '' -- Don't trigger normal search
+  end
+
   if should_use_telescope_immediately(cfg) then
     local ok, telescope = pcall(require, 'beam.telescope')
     if ok then

@@ -11,6 +11,20 @@ M.registered_text_objects = {}
 function M.setup(opts)
   config.setup(opts)
 
+  -- Warn about incompatible configuration
+  if
+    config.current.beam_scope
+    and config.current.beam_scope.enabled
+    and config.current.cross_buffer
+    and config.current.cross_buffer.enabled
+  then
+    vim.notify(
+      'Beam.nvim: BeamScope is disabled when cross_buffer is enabled (incompatible features)',
+      vim.log.levels.WARN,
+      { title = 'Beam.nvim' }
+    )
+  end
+
   if opts and opts.enable_default_text_objects ~= false then
     text_objects.setup_defaults()
   end

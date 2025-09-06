@@ -8,6 +8,9 @@ describe('beam.nvim text object operations', function()
       prefix = ',',
       visual_feedback_duration = 10,
       enable_default_text_objects = true,
+      beam_scope = {
+        enabled = false, -- Disable BeamScope for tests
+      },
     })
 
     -- Suppress visual mode and line change messages

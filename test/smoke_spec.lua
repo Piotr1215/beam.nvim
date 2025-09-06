@@ -60,6 +60,11 @@ describe('beam.nvim', function()
 
   describe('pending operation state', function()
     it('sets pending operation state correctly', function()
+      -- Disable BeamScope for this test
+      beam.setup({
+        prefix = ',',
+        beam_scope = { enabled = false },
+      })
       local operators = require('beam.operators')
       operators.BeamYankSearchSetup('i"')
       assert.is_not_nil(operators.BeamSearchOperatorPending)

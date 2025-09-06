@@ -20,6 +20,36 @@ M.defaults = {
   excluded_motions = {}, -- List of motion keys to exclude from discovery (e.g., {'Q', 'R'})
   resolved_conflicts = {}, -- List of text object keys where conflicts are intentional (e.g., {'m'})
   smart_highlighting = false, -- Enable real-time highlighting for delimiter-based text objects
+  beam_scope = {
+    enabled = true, -- Enable BeamScope for scoped text objects (enabled by default for better UX)
+    -- Default scoped objects are delimited text objects that naturally benefit from BeamScope
+    scoped_text_objects = {
+      -- Delimited text objects (enabled by default)
+      '"',
+      "'",
+      '`', -- Quotes
+      '(',
+      ')',
+      '[',
+      ']',
+      '{',
+      '}',
+      '<',
+      '>', -- Brackets
+      'b',
+      'B', -- Aliases for () and {}
+      't', -- Tags
+      -- Note: We exclude w, W, s, p as they are ubiquitous
+      -- Custom text objects like 'm' should be added by users if desired
+    },
+    -- Additional custom text objects can be added by users
+    custom_scoped_text_objects = {
+      -- Example: 'm' for markdown code blocks
+      -- Add any plugin-specific or custom text objects here
+    },
+    preview_context = 3, -- Number of context lines to show before/after in preview
+    window_width = 80, -- Maximum width of the BeamScope window (increased for full content)
+  },
   experimental = {
     dot_repeat = false,
     count_support = false,

@@ -166,6 +166,24 @@ function M.check()
   else
     info('No text objects excluded')
   end
+
+  -- Check for incompatible features
+  start('Feature Compatibility')
+
+  local beam_scope_enabled = config.current.beam_scope and config.current.beam_scope.enabled
+  local cross_buffer_enabled = config.current.cross_buffer and config.current.cross_buffer.enabled
+
+  if beam_scope_enabled and cross_buffer_enabled then
+    warn('BeamScope and cross-buffer are both enabled but are incompatible')
+    info('  BeamScope will be automatically disabled when cross-buffer is active')
+    info('  Consider disabling one of these features in your config')
+  elseif beam_scope_enabled then
+    ok('BeamScope is enabled (visual text object selection)')
+  elseif cross_buffer_enabled then
+    ok('Cross-buffer operations are enabled')
+  else
+    info('Both BeamScope and cross-buffer operations are disabled')
+  end
 end
 
 return M
