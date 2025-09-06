@@ -8,7 +8,11 @@
 
 Without beam: `[1]/ [2]<type search term> [3]<enter> [4]<text object (cib)>`
 
-With beam***: `[1]/<text objet (,cib)> [2]<type search term> [3]<enter>`
+With beam-->: `[1]/<text object (,cib)> [2]<type search term> [3]<enter>`
+
+Or easier if you know that next object to change is right below.
+
+`[1]<text object (,cim)> [2]<enter>`
 
 <div align="center">
 
@@ -18,16 +22,34 @@ With beam***: `[1]/<text objet (,cib)> [2]<type search term> [3]<enter>`
 
 </div>
 
+* [Quick Examples](#quick-examples)
+* [Installation](#installation)
+* [Features](#features)
+* [Usage](#usage)
+* [Configuration](#configuration)
+* [Troubleshooting](#troubleshooting)
+* [Inspiration](#inspiration)
+* [License](#license)
 
 ## Quick Examples
 
 ```vim
+,ci"<enter>     " Find and change inside next quotes
 ,yi"func        " Search for 'func' & yank inside quotes at that location
 ,dip            " Search & delete inside paragraph
 ,ci(func        " Search for 'func' & change inside parentheses
 ,vimclass       " Search for 'class' & select inside code block
 ,Y              " Search & yank entire line
+,cifconst       " Find 'const' & change function body
+,di"error       " Find 'error' string & delete it
+,yapfunction    " Find 'function' & yank paragraph
+,vi{className   " Find 'className' & select code block
 ```
+
+> [!NOTE]
+> **BeamScope in action**: This screenshot shows BeamScope's visual text object selection interface. When you trigger an operation like `,ci"`, BeamScope displays all available quote pairs in a side window, starting from your cursor position. You can navigate with `j`/`k`, filter with `/`, and select with `Enter` - making it easy to target exactly the text object you want without searching.
+
+![beam-scope](./static/beam-scope.png) 
 
 ## Installation
 
@@ -77,36 +99,56 @@ use {
 
 ## Features
 
+These features are considered _stable_ and the settings and interface should remain backwards compatible  in the new plugin versions.
+
 - **Native Search Integration** - Uses Vim's `/` search with incremental highlighting
-- **Universal Text Object Support** - Works with ALL text objects from any plugin
-- **Motion Support** - Handles single-letter motions (`L` for URL, `Q` for quote, etc.)
-- **Cross-Buffer Operations** - Search and operate across all open buffers
-- **Auto-Discovery** - Automatically finds and uses all text objects from your plugins
+- **BeamScope** - Visual text object selection interface with smart cursor positioning
+- **Standard Text Object Support** - Supports all [nvim standard text objects](https://neovim.io/doc/user/vimindex.html#_2.1-text-objects)
+- **Custom Text Objects** - Define your own text objects with full implementation
+- **Auto-Discovery** - Finds and uses text objects from your plugins automatically
+- **Conflict Resolution** - Smart handling of text object collisions between plugins
+- **Exclusion Control** - Fine-grained control over which text objects to use
 - **Visual Feedback** - Shows selection briefly before operation executes
 - **Smart Position Restore** - Yank/delete returns to origin, change/visual stays at target
 - **Search Navigation** - Use `Ctrl-G`/`Ctrl-T` to navigate matches while searching
 - **Line Operators** - Special `Y`, `D`, `C`, `V` operators for entire lines
 - **Statusline Integration** - See pending operations in your statusline
-- **Custom Text Objects** - Define your own text objects
+
+### Experimental Features
+
+These features are considered experimental and might be changed or removed in the future released on the plugin.
+
 - **Telescope Integration** - Optional fuzzy finder for powerful cross-buffer search
+- **Cross-Buffer Operations** - Search and operate across all open buffers
 
 ## Usage
 
 ### How it Works
 
 1. Press `,yi"` (or any operator + text object)
-2. Search for your target location
+2. Search for your target location (or BeamScope selection appears for scoped objects)
 3. Press Enter
 4. Operation executes there, cursor returns (for yank/delete)
 
-### Basic Operations
+### When BeamScope vs Search Activates
 
-| Keys | Description |
-|------|-------------|
-| `,yi"` | Search & yank inside quotes |
-| `,dap` | Search & delete around paragraph |
-| `,ciw` | Search & change inside word |
-| `,vi{` | Search & select inside curly braces |
+- **BeamScope**: Automatically activates for scoped text objects (quotes, brackets, tags) when multiple instances exist in the buffer. Shows all instances in a side window for visual selection.
+- **Regular Search**: Used for all other text objects (words, paragraphs, sentences) or when BeamScope is disabled. Uses Vim's native `/` search with incremental highlighting.
+
+### Common Operations
+
+| Keys | Action | Example Use Case | Cursor Behavior |
+|------|--------|------------------|-----------------|
+| `,yi"` | Yank inside quotes | Copy string without moving | Returns to origin |
+| `,ya(` | Yank around parentheses | Copy function call with parens | Returns to origin |
+| `,dip` | Delete inside paragraph | Remove paragraph content | Returns to origin |
+| `,dap` | Delete around paragraph | Remove entire paragraph + spacing | Returns to origin |
+| `,ciw` | Change inside word | Replace word under search | Stays at target |
+| `,ci"` | Change inside quotes | Edit string content | Stays at target |
+| `,vi{` | Select inside braces | Highlight code block | Stays at target |
+| `,vit` | Select inside HTML tag | Select tag content | Stays at target |
+| `,Y` | Yank entire line | Copy full line at search | Returns to origin |
+| `,C` | Change entire line | Replace line at search | Stays at target |
 
 ### Search Navigation
 
@@ -118,43 +160,21 @@ While searching:
 
 ### Supported Text Objects
 
-beam.nvim supports ALL Vim/Neovim text objects. Here are the most common ones:
+beam.nvim works with ALL [Vim/Neovim text objects](https://neovim.io/doc/user/vimindex.html#_2.1-text-objects):
+- **Basic**: `iw`/`aw` (word), `is`/`as` (sentence), `ip`/`ap` (paragraph)
+- **Quotes**: `i"`/`a"`, `i'`/`a'`, `` i` ``/`` a` ``
+- **Brackets**: `i(`/`a(`, `i[`/`a[`, `i{`/`a{`, `i<`/`a<`
+- **Tags**: `it`/`at` (HTML/XML)
+- **Line operators**:
+`Y`, `D`, `C`, `V` for entire lines
 
-#### Built-in Vim Text Objects
-| Text Object | Description | Example Usage |
-|------------|-------------|---------------|
-| `iw`/`aw` | Inside/around word | `,yiw` - yank word |
-| `iW`/`aW` | Inside/around WORD (includes punctuation) | `,diW` - delete WORD |
-| `is`/`as` | Inside/around sentence | `,cis` - change sentence |
-| `ip`/`ap` | Inside/around paragraph | `,vip` - select paragraph |
-| `i"`/`a"` | Inside/around double quotes | `,yi"` - yank quoted text |
-| `i'`/`a'` | Inside/around single quotes | `,di'` - delete quoted text |
-| `` i` ``/`` a` `` | Inside/around backticks | `` ,ci` `` - change backticked |
-| `i(`/`a(`, `i)`/`a)` | Inside/around parentheses | `,yi(` - yank in parens |
-| `i[`/`a[`, `i]`/`a]` | Inside/around square brackets | `,di[` - delete in brackets |
-| `i{`/`a{`, `i}`/`a}` | Inside/around curly braces | `,ci{` - change in braces |
-| `i<`/`a<`, `i>`/`a>` | Inside/around angle brackets | `,vi<` - select in angles |
-| `it`/`at` | Inside/around HTML/XML tags | `,yit` - yank tag content |
+> [!TIP]
+> Run `:BeamShowTextObjects` to see all available text objects including those from other plugins.
 
-#### Alternative Syntax (Vim-compatible)
-| Text Object | Equivalent to | Description |
-|------------|---------------|-------------|
-| `ib`/`ab` | `i(`/`a(` | Inside/around parentheses |
-| `iB`/`aB` | `i{`/`a{` | Inside/around braces |
-| `iq`/`aq` | `i"`/`a"` | Inside/around double quotes |
-
-#### Special Line Operators
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `Y` | Yank entire line at target | `,Y` → search → yank line |
-| `D` | Delete entire line at target | `,D` → search → delete line |
-| `C` | Change entire line at target | `,C` → search → change line |
-| `V` | Select entire line at target | `,V` → search → select line |
-
-#### With Auto-Discovery
+With auto-discovery enabled, beam automatically integrates text objects from
 When `auto_discover_text_objects = true`, beam automatically finds and uses text objects from:
 - **treesitter-textobjects**: `if` (function), `ic` (class), `il` (loop), etc.
-- **mini.ai**: Custom text objects you've defined
+- [mini.ai](https://github.com/echasnovski/mini.ai):  Custom text objects you've defined
 - **nvim-various-textobjs**: `ii` (indentation), `R` (rest of line), etc.
 - **targets.vim**: Seek-able text objects with next/last variants
 - Any other plugin that defines text objects!
@@ -169,126 +189,32 @@ When `auto_discover_text_objects = true`, beam automatically finds and uses text
 
 ## Configuration
 
-> **Note**: The source of truth for all configuration options is [`lua/beam/config.lua`](lua/beam/config.lua). The examples below show the default values.
-
-### Default Setup
+### Practical Setup
 
 ```lua
+-- Most users will want something like this:
 require('beam').setup({
-  prefix = ',',                      -- Your prefix key (mini-leader)
-  visual_feedback_duration = 150,    -- ms to show selection
-  clear_highlight = true,            -- Clear search highlight after operation
-  clear_highlight_delay = 500,       -- ms before clearing
-  cross_buffer = {
-    enabled = false,                 -- Enable cross-buffer operations
-    fuzzy_finder = 'telescope',      -- Fuzzy finder (telescope required when enabled)
-    include_hidden = false,          -- Include hidden buffers
-  },
-  enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
-  auto_discover_custom_text_objects = true, -- Auto-discover custom text objects from plugins (mini.ai, treesitter, etc.)
-  show_discovery_notification = true,-- Show notification about discovered objects
-  excluded_text_objects = {},       -- Exclude specific text objects (e.g., {'q', 'z'})
-  excluded_motions = {},             -- Exclude specific motions (e.g., {'Q', 'R'})
-  resolved_conflicts = {},          -- Mark conflicts as intentional (e.g., {'m'})
-  smart_highlighting = false,        -- Context-aware search highlighting
+  prefix = ',',                      -- Your prefix key
+  beam_scope = { enabled = true },   -- Visual selection for quotes/brackets
+  auto_discover_custom_text_objects = true, -- Use text objects from other plugins
 })
 ```
 
-### Cross-Buffer Operations & Telescope Integration
+### Telescope Integration (Experimental)
 
-beam.nvim integrates with [Telescope](https://github.com/nvim-telescope/telescope.nvim) for powerful fuzzy finding across buffers. The integration is intelligent and context-aware:
+When `cross_buffer.enabled = true` and you have [Telescope](https://github.com/nvim-telescope/telescope.nvim) installed, beam uses it for fuzzy finding across buffers.
 
-#### When Telescope is Used
-
-1. **Cross-buffer with multiple buffers**: When `cross_buffer.enabled = true` and multiple buffers are detected, Telescope is automatically used for fuzzy finding across buffers.
-
-2. **Single-buffer (optional)**: When `experimental.telescope_single_buffer.enabled = true`, Telescope is used even for single-buffer operations.
-
-#### Configuration Layers
-
-```lua
-require('beam').setup({
-  -- Cross-buffer configuration
-  cross_buffer = {
-    enabled = false,                 -- Enable cross-buffer operations
-    fuzzy_finder = 'telescope',      -- Fuzzy finder to use (currently only telescope)
-    include_hidden = false,          -- Include hidden buffers in search
-  },
-  
-  -- Experimental: Use Telescope for single buffer too
-  experimental = {
-    telescope_single_buffer = {
-      enabled = false,               -- Use Telescope for single buffer search
-      theme = 'dropdown',            -- Theme: 'dropdown', 'cursor', 'ivy'
-      preview = false,               -- Show preview pane
-      winblend = 10,                 -- Window transparency (0-100)
-    }
-  }
-})
-```
-
-#### Buffer Visibility
-
-When `include_hidden = false` (default), only buffers visible in windows are searched. This prevents accidentally operating on background buffers. Visual indicators in Telescope:
-- `●` - Visible buffer (in a window)
-- `○` - Hidden buffer (loaded but not visible)
-
-#### Examples
-
-```lua
--- Search only visible buffers (default)
-require('beam').setup({
-  cross_buffer = {
-    enabled = true,
-    include_hidden = false  -- Only search visible buffers
-  }
-})
-
--- Search all loaded buffers
-require('beam').setup({
-  cross_buffer = {
-    enabled = true,
-    include_hidden = true   -- Include hidden buffers
-  }
-})
-
--- Use Telescope for everything
-require('beam').setup({
-  cross_buffer = { enabled = true },
-  experimental = {
-    telescope_single_buffer = {
-      enabled = true,
-      theme = 'cursor',     -- Compact cursor theme
-      preview = true        -- Show preview
-    }
-  }
-})
-```
-
-#### Behavior Notes
-
-- **Navigation**: Ctrl-G/T navigation doesn't work with Telescope (use Telescope's own navigation)
-- **Smart gating**: Telescope only activates when truly needed (multiple buffers for cross-buffer mode)
-- **Buffer switching**: For change/visual operations, beam opens the target buffer in a split; for yank/delete, it returns to your original position
+- Multiple buffers → Telescope automatically activates
+- Single buffer → Native `/` search (unless `experimental.telescope_single_buffer.enabled = true`)
+- `include_hidden = false` → Only searches visible buffers (recommended)
 
 ### Auto-Discovery
 
-Beam always includes Vim's built-in text objects (quotes, brackets, words, paragraphs, etc.).
-
-With `auto_discover_custom_text_objects = true`, beam additionally discovers and registers:
-
-- **mini.ai** - Complete integration with ALL text objects:
-  - Built-in objects: `a` (argument), `f` (function call), `t` (tag), `q` (quotes), `b` (brackets)
-  - Your custom text objects: Functions, patterns, and aliases defined in mini.ai config
-  - Note: `?` (user prompt) is excluded by default as it requires interactive input
-- **nvim-various-textobjs** - `iq` (any quote), `ih` (headers), `L` (URL motion)
-- **treesitter-textobjects** - `if` (function), `ic` (class), etc.
-- **Built-in Vim** - All standard text objects
-
-This gives you instant access to 100+ combinations like:
-- `,yih` - Search & yank markdown header
-- `,ciq` - Search & change any quote type
-- `,dL` - Search & delete to URL
+With `auto_discover_custom_text_objects = true` (default), beam automatically finds text objects from:
+- **mini.ai** - arguments, function calls, custom patterns
+- **treesitter-textobjects** - functions, classes, loops
+- **nvim-various-textobjs** - URLs, indentation, headers
+- Any plugin that defines text objects
 
 ### BeamScope (Visual Text Object Selection)
 
@@ -311,66 +237,10 @@ This means when you trigger BeamScope, you immediately see the most relevant tex
 
 **Note**: BeamScope is incompatible with cross-buffer operations. When `cross_buffer.enabled = true`, BeamScope is automatically disabled.
 
-### Smart Highlighting (Context-Aware Search)
+### Smart Highlighting
 
-When `smart_highlighting = true`, beam constrains search results based on the text object you're using. This means when you search with delimiter-based text objects, only matches within those delimiters are highlighted.
+When `smart_highlighting = true`, search highlights only appear within the text object context. For example, `,di"` → `/test` only highlights "test" inside quotes, not everywhere. Works with native search only (not Telescope).
 
-**Note**: Smart highlighting only works with native Vim search (`/`). It is not available when using Telescope.
-
-#### Example
-```vim
-" Without smart highlighting:
-,di"  → /test  → highlights ALL occurrences of "test"
-
-" With smart highlighting:  
-,di"  → /test  → only highlights "test" inside double quotes
-```
-
-This works for quotes, brackets, HTML tags, and more. The search visually shows you exactly what will be operated on.
-
-#### Supported Text Objects for Smart Highlighting
-- **Quotes**: `i"`, `a"`, `i'`, `a'`, `` i` ``, `` a` ``
-- **Brackets**: `i(`, `a(`, `i[`, `a[`, `i{`, `a{`, `i<`, `a<`
-- **Alternative syntax**: 
-  - `ib`/`ab` (same as `i(`/`a(` - parentheses)
-  - `iB`/`aB` (same as `i{`/`a{` - braces)
-  - `iq`/`aq` (same as `i"`/`a"` - double quotes)
-- **HTML/XML tags**: `it`, `at`
-- **Block comments**: `iC`, `aC`
-- **Function arguments**: `ia`
-
-### Excluding Text Objects and Motions
-
-You can exclude specific text objects or motions from auto-discovery:
-
-```lua
-require('beam').setup({
-  auto_discover_custom_text_objects = true,
-  excluded_text_objects = { 'q', 'z' },  -- Exclude iq/aq and iz/az
-  excluded_motions = { 'Q', 'R' },       -- Exclude Q and R motions
-})
-```
-
-#### Handling Conflicts
-
-When beam discovers text objects that conflict with its own or between plugins, you have several options:
-
-```lua
-require('beam').setup({
-  -- Mark conflicts as intentional (both implementations coexist)
-  resolved_conflicts = { 'm' },  -- e.g., beam's im/am AND your custom im/am both work
-  
-  -- Or exclude the conflicting text object entirely
-  excluded_text_objects = { 'f' },  -- Skip if/af discovery
-  
-  -- Or override with your preferred version
-  custom_text_objects = { 
-    f = 'function (mini.ai)'  -- Use mini.ai's version instead
-  },
-})
-```
-
-Run `:checkhealth beam` to see all conflicts and get specific resolution suggestions.
 
 ### Statusline Integration
 
@@ -390,7 +260,10 @@ sections = {
 vim.opt.statusline:append('%{get(g:,"beam_search_operator_indicator","")}')
 ```
 
-### Full Configuration with All Options
+
+
+<details>
+<summary>Full configuration options</summary>
 
 ```lua
 require('beam').setup({
@@ -407,6 +280,19 @@ require('beam').setup({
     enabled = false,                 -- Enable cross-buffer operations
     fuzzy_finder = 'telescope',      -- Fuzzy finder to use (currently only telescope)
     include_hidden = false,          -- Include hidden buffers in search (default: only visible)
+  },
+  
+  -- BeamScope visual selection
+  beam_scope = {
+    enabled = true,                  -- Enable BeamScope for visual text object selection
+    scoped_text_objects = {          -- Text objects that trigger BeamScope
+      '"', "'", '`',                 -- Quotes
+      '(', ')', '[', ']', '{', '}',  -- Brackets
+      '<', '>', 'b', 'B', 't'        -- Angles, aliases, tags
+    },
+    custom_scoped_text_objects = {}, -- Additional custom text objects for BeamScope
+    preview_context = 3,             -- Lines of context in preview
+    window_width = 80,               -- Maximum width of BeamScope window
   },
   
   -- Text object configuration
@@ -435,128 +321,8 @@ require('beam').setup({
 })
 ```
 
-### Custom Text Objects
+</details>
 
-beam.nvim can define its own text objects that work with all beam operations. This is useful when you want text objects that don't exist globally but should work with remote operations.
-
-```lua
-require('beam').setup({
-  prefix = ',',
-  enable_default_text_objects = true, -- Enables beam's built-in text objects (currently: im/am for markdown code blocks)
-  custom_text_objects = {
-    -- Simple format: Just a description for beam operations
-    -- NOTE: This assumes the text object already exists (e.g., from treesitter-textobjects)
-    -- It only adds beam keymaps like ,yiF but doesn't create the iF/aF text object itself
-    ['F'] = 'function (treesitter)',
-    
-    -- Full format: Creates the actual text object AND adds beam operations
-    -- This creates the ir/ar text objects that work everywhere in Vim
-    ['r'] = {
-      desc = 'Ruby block',
-      select = function(inclusive)
-        -- Your text object implementation
-        -- inclusive: true for 'around', false for 'inside'
-        if inclusive then
-          vim.cmd('normal! vaB')  -- around block
-        else
-          vim.cmd('normal! viB')  -- inside block
-        end
-      end
-    }
-  }
-})
-
--- Or register them dynamically
-require('beam').register_text_object('z', 'custom zone')
-
--- Register with implementation
-require('beam').register_text_object('g', {
-  desc = 'git conflict',
-  select = function(inclusive)
-    -- Implementation to select git conflict markers
-  end
-})
-```
-
-**Built-in Text Objects:**
-- `im`/`am` - Inside/around markdown code block (triple backticks) - enabled with `enable_default_text_objects = true`
-
-## Telescope Integration
-
-beam.nvim integrates with [Telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) to provide a powerful fuzzy finder interface for cross-buffer operations.
-
-### How It Works
-
-- **Single Buffer (default)**: Uses native Vim search (`/`) for fast, lightweight operations
-- **Multiple Buffers**: Automatically uses Telescope when `cross_buffer.enabled = true` and multiple buffers are open
-- **Optional Single Buffer Telescope**: Can be enabled for enhanced single-buffer search experience
-
-### Configuration
-
-```lua
-require('beam').setup({
-  -- Cross-buffer configuration
-  cross_buffer = {
-    enabled = true,                  -- Enable cross-buffer operations
-    fuzzy_finder = 'telescope',      -- Currently only 'telescope' is supported
-    include_hidden = false           -- Search only visible buffers by default (true = all buffers)
-  },
-  
-  -- Optional: Use Telescope even for single buffer
-  experimental = {
-    telescope_single_buffer = {
-      enabled = false,               -- Set to true to always use Telescope
-      theme = 'dropdown',            -- 'dropdown', 'cursor', or 'ivy'
-      preview = false,               -- Show preview pane
-      winblend = 10                  -- Window transparency (0-100)
-    }
-  }
-})
-```
-
-### Behavior
-
-1. **With One Buffer Open**:
-   - Uses normal `/` search (unless `telescope_single_buffer.enabled = true`)
-   - Fast and lightweight
-
-2. **With Multiple Buffers Open** (and `cross_buffer.enabled = true`):
-   - Automatically uses Telescope
-   - Shows all matches across all buffers
-   - Properly handles buffer navigation (opens splits for change/visual operations)
-
-3. **Smart Buffer Navigation**:
-   - **Yank/Delete**: Returns cursor to original position
-   - **Change/Visual**: Opens target buffer in split if needed, or switches to existing window
-
-## Integration with Other Plugins
-
-### Treesitter Text Objects
-
-```lua
-local beam = require('beam')
-if beam then
-  beam.register_text_objects({
-    ['f'] = 'function (treesitter)',
-    ['c'] = 'class (treesitter)',
-    ['l'] = 'loop (treesitter)',
-    ['a'] = 'parameter (treesitter)',
-  })
-end
-```
-
-### mini.ai
-
-```lua
--- After setting up mini.ai
-local beam = require('beam')
-if beam then
-  beam.register_text_objects({
-    ['f'] = 'function (mini.ai)',
-    ['a'] = 'argument (mini.ai)',
-  })
-end
-```
 
 ## Troubleshooting
 
@@ -572,7 +338,7 @@ Run `:checkhealth beam` to diagnose common issues.
 - Make sure you have the text objects installed that you're trying to use
 - Check `:messages` for any error output
 
-### Inspiration
+## Inspiration
 
 Inspired by the power of Vim's composable operations and the desire to operate on text without losing context as well as several excellent Neovim plugins that explore innovative ways of navigating and manipulating text:
 
