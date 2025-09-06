@@ -15,6 +15,7 @@ M.scope_state = {
   textobj = nil,
   saved_pos = nil,
   saved_buf = nil,
+  saved_win = nil,
 }
 
 -- Cleanup function
@@ -49,6 +50,7 @@ function M.cleanup_scope()
     textobj = nil,
     saved_pos = nil,
     saved_buf = nil,
+    saved_win = nil,
   }
 end
 
@@ -627,28 +629,23 @@ function M.execute_operation(line_num)
   local source_buf = M.scope_state.source_buffer
   local saved_pos = M.scope_state.saved_pos
   local saved_buf = M.scope_state.saved_buf
+  local saved_win = M.scope_state.saved_win -- Get the saved window from state
 
   -- Clean up BeamScope UI first
   M.cleanup_scope()
 
-  -- Make sure we're in the source buffer/window
-  if saved_buf and vim.api.nvim_buf_is_valid(saved_buf) then
-    -- Return to original buffer first
-    vim.api.nvim_set_current_buf(saved_buf)
-  else
-    vim.api.nvim_set_current_buf(source_buf)
+  -- After cleanup, we should return to the original window if it still exists
+  if saved_win and vim.api.nvim_win_is_valid(saved_win) then
+    vim.api.nvim_set_current_win(saved_win)
   end
 
   -- Save the return position for yank/delete operations
   local should_return = (action == 'yank' or action == 'delete')
   local return_pos = should_return and saved_pos or nil
 
-  -- Move to the text object location in the source buffer
-  -- We need to be in the right buffer to execute the operation
-  local current_buf = vim.api.nvim_get_current_buf()
-  if current_buf ~= source_buf then
-    -- Switch to source buffer temporarily
-    vim.cmd('buffer ' .. source_buf)
+  -- Switch to source buffer temporarily to execute the operation
+  if vim.api.nvim_get_current_buf() ~= source_buf then
+    vim.api.nvim_set_current_buf(source_buf)
   end
 
   -- Jump to the code block
@@ -746,8 +743,15 @@ function M.execute_operation(line_num)
 
   -- Return to original position if needed
   if return_pos and saved_buf then
-    -- Return to original buffer
-    if vim.api.nvim_buf_is_valid(saved_buf) and vim.api.nvim_get_current_buf() ~= saved_buf then
+    -- Try to return to the original window if it's still valid
+    if saved_win and vim.api.nvim_win_is_valid(saved_win) then
+      vim.api.nvim_set_current_win(saved_win)
+      -- Make sure the window has the correct buffer
+      if vim.api.nvim_win_get_buf(saved_win) ~= saved_buf then
+        vim.api.nvim_win_set_buf(saved_win, saved_buf)
+      end
+    elseif vim.api.nvim_buf_is_valid(saved_buf) then
+      -- Original window no longer exists, switch current window to saved buffer
       vim.api.nvim_set_current_buf(saved_buf)
     end
     -- Restore cursor position
@@ -759,6 +763,7 @@ end
 function M.beam_scope(action, textobj)
   local source_buf = vim.api.nvim_get_current_buf()
   local saved_pos = vim.fn.getpos('.')
+  local saved_win = vim.api.nvim_get_current_win() -- Save the original window
 
   -- Extract the actual text object key (remove i/a prefix)
   local textobj_key = textobj:sub(2)
@@ -776,6 +781,7 @@ function M.beam_scope(action, textobj)
   M.scope_state.textobj = textobj
   M.scope_state.saved_pos = saved_pos
   M.scope_state.saved_buf = source_buf
+  M.scope_state.saved_win = saved_win -- Store the original window
 
   -- Create the scope buffer
   local scope_buf = M.create_scope_buffer(instances, textobj_key, source_buf)
@@ -969,11 +975,51 @@ function M.beam_scope(action, textobj)
     desc = 'Quit BeamScope',
   })
 
-  -- Show initial preview
-  M.update_preview(1)
+  -- Find the best initial position based on cursor location
+  local initial_line = 1
+  if saved_pos and saved_pos[2] > 0 then
+    local cursor_line = saved_pos[2]
+    local best_instance = 1
+    local min_distance = math.huge
 
-  -- Focus the BeamScope window
+    -- Find the text object instance closest to (preferably below) the cursor
+    for i, instance in ipairs(instances) do
+      -- Prefer instances at or below cursor position
+      if instance.start_line >= cursor_line then
+        local distance = instance.start_line - cursor_line
+        if distance < min_distance then
+          min_distance = distance
+          best_instance = i
+        end
+      end
+    end
+
+    -- If no instance below cursor, find the closest one above
+    if min_distance == math.huge then
+      for i, instance in ipairs(instances) do
+        if instance.start_line < cursor_line then
+          local distance = cursor_line - instance.start_line
+          if distance < min_distance then
+            min_distance = distance
+            best_instance = i
+          end
+        end
+      end
+    end
+
+    -- Set cursor to the display position of the best instance
+    local target_node = M.scope_state.node_map[best_instance]
+    if target_node and target_node.display_start then
+      initial_line = target_node.display_start
+    end
+  end
+
+  -- Focus the BeamScope window and set cursor position
   vim.api.nvim_set_current_win(win)
+  vim.api.nvim_win_set_cursor(win, { initial_line, 0 })
+
+  -- Show preview for the selected position
+  M.update_preview(initial_line)
 end
 
 -- Check if a text object should use BeamScope

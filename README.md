@@ -300,6 +300,15 @@ When enabled (default), BeamScope automatically activates for delimited text obj
 - Select with `Enter`
 - Cancel with `Esc` or `q`
 
+#### Smart Cursor Positioning
+
+BeamScope intelligently positions the buffer view based on your cursor location:
+- **Primary behavior**: Shows the text object instance at or just below your cursor position
+- **Fallback**: If no instances exist below the cursor, shows the nearest one above
+- **Benefit**: No need to scroll through the entire buffer - BeamScope starts right where you're working
+
+This means when you trigger BeamScope, you immediately see the most relevant text objects near your current position, making selection faster and more intuitive.
+
 **Note**: BeamScope is incompatible with cross-buffer operations. When `cross_buffer.enabled = true`, BeamScope is automatically disabled.
 
 ### Smart Highlighting (Context-Aware Search)

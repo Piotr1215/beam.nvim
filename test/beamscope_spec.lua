@@ -223,6 +223,162 @@ describe('BeamScope', function()
     end)
   end)
 
+  describe('smart cursor positioning', function()
+    it('should position at nearest text object below cursor', function()
+      -- Create a test buffer with multiple quoted strings
+      local source_buf = vim.api.nvim_create_buf(false, true)
+      local lines = {
+        'local a = "first"', -- Line 1
+        '', -- Line 2
+        'local b = "second"', -- Line 3
+        'local c = "third"', -- Line 4
+        '', -- Line 5
+        'local d = "fourth"', -- Line 6
+        'local e = "fifth"', -- Line 7
+      }
+      vim.api.nvim_buf_set_lines(source_buf, 0, -1, false, lines)
+
+      -- Set cursor at line 3 (between "second" and "third")
+      local saved_pos = { 0, 3, 1, 0 }
+
+      -- Find text objects
+      local instances = scope.find_text_objects('"', source_buf)
+
+      -- Should find 5 quoted strings
+      assert.equals(5, #instances)
+
+      -- Simulate the smart positioning logic from beam_scope
+      local cursor_line = saved_pos[2]
+      local best_instance = 1
+      local min_distance = math.huge
+
+      -- Find the text object instance closest to (preferably below) the cursor
+      for i, instance in ipairs(instances) do
+        if instance.start_line >= cursor_line then
+          local distance = instance.start_line - cursor_line
+          if distance < min_distance then
+            min_distance = distance
+            best_instance = i
+          end
+        end
+      end
+
+      -- Should select the "second" string (at line 3, same as cursor)
+      assert.equals(2, best_instance)
+      assert.equals(3, instances[best_instance].start_line)
+
+      -- Clean up
+      vim.api.nvim_buf_delete(source_buf, { force = true })
+    end)
+
+    it('should position at nearest text object above cursor if none below', function()
+      -- Create a test buffer with multiple quoted strings
+      local source_buf = vim.api.nvim_create_buf(false, true)
+      local lines = {
+        'local a = "first"', -- Line 1
+        'local b = "second"', -- Line 2
+        'local c = "third"', -- Line 3
+        '', -- Line 4
+        '', -- Line 5
+        '-- No more strings below', -- Line 6
+      }
+      vim.api.nvim_buf_set_lines(source_buf, 0, -1, false, lines)
+
+      -- Set cursor at line 5 (after all strings)
+      local saved_pos = { 0, 5, 1, 0 }
+
+      -- Find text objects
+      local instances = scope.find_text_objects('"', source_buf)
+
+      -- Should find 3 quoted strings
+      assert.equals(3, #instances)
+
+      -- Simulate the smart positioning logic from beam_scope
+      local cursor_line = saved_pos[2]
+      local best_instance = 1
+      local min_distance = math.huge
+
+      -- Find the text object instance closest to (preferably below) the cursor
+      for i, instance in ipairs(instances) do
+        if instance.start_line >= cursor_line then
+          local distance = instance.start_line - cursor_line
+          if distance < min_distance then
+            min_distance = distance
+            best_instance = i
+          end
+        end
+      end
+
+      -- If no instance below cursor, find the closest one above
+      if min_distance == math.huge then
+        for i, instance in ipairs(instances) do
+          if instance.start_line < cursor_line then
+            local distance = cursor_line - instance.start_line
+            if distance < min_distance then
+              min_distance = distance
+              best_instance = i
+            end
+          end
+        end
+      end
+
+      -- Should select the "third" string (closest above cursor)
+      assert.equals(3, best_instance)
+      assert.equals(3, instances[best_instance].start_line)
+
+      -- Clean up
+      vim.api.nvim_buf_delete(source_buf, { force = true })
+    end)
+
+    it('should handle cursor exactly on a text object', function()
+      -- Create a test buffer with markdown headers
+      local source_buf = vim.api.nvim_create_buf(false, true)
+      local lines = {
+        '# First Header', -- Line 1
+        'Content one', -- Line 2
+        '', -- Line 3
+        '## Second Header', -- Line 4
+        'Content two', -- Line 5
+        '', -- Line 6
+        '### Third Header', -- Line 7
+        'Content three', -- Line 8
+      }
+      vim.api.nvim_buf_set_lines(source_buf, 0, -1, false, lines)
+
+      -- Set cursor exactly on the second header
+      local saved_pos = { 0, 4, 1, 0 }
+
+      -- Find text objects
+      local instances = scope.find_text_objects('h', source_buf)
+
+      -- Should find 3 headers
+      assert.equals(3, #instances)
+
+      -- Simulate the smart positioning logic
+      local cursor_line = saved_pos[2]
+      local best_instance = 1
+      local min_distance = math.huge
+
+      for i, instance in ipairs(instances) do
+        if instance.start_line >= cursor_line then
+          local distance = instance.start_line - cursor_line
+          if distance < min_distance then
+            min_distance = distance
+            best_instance = i
+          end
+        end
+      end
+
+      -- Should select the second header (exact match)
+      assert.equals(2, best_instance)
+      assert.equals(4, instances[best_instance].start_line)
+      assert.equals(0, min_distance) -- Distance should be 0 for exact match
+
+      -- Clean up
+      vim.api.nvim_buf_delete(source_buf, { force = true })
+    end)
+  end)
+
   describe('cleanup_scope', function()
     it('should properly clean up all state', function()
       -- Create some state

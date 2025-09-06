@@ -12,6 +12,8 @@ CONTENTS                                                        *beam-contents*
     Configuration ......................... |beam-config|
     Text Objects .......................... |beam-textobjects|
     Keybindings ........................... |beam-keybindings|
+    Telescope Integration ................. |beam-telescope|
+    BeamScope ............................. |beam-beamscope|
     Tips & Tricks ......................... |beam-tips|
     Troubleshooting ....................... |beam-troubleshooting|
 
@@ -324,6 +326,54 @@ DEPENDENCIES ~
 For cross-buffer operations, install:
 - telescope.nvim
 - plenary.nvim (required by telescope)
+
+==============================================================================
+BEAMSCOPE                                                    *beam-beamscope*
+
+BeamScope provides a visual interface for selecting text objects when multiple
+instances exist in a buffer. Instead of searching, it shows all instances in
+a side window and lets you pick one.
+
+ACTIVATION ~
+BeamScope automatically activates for configured text objects (quotes,
+brackets, etc.) when multiple instances are found in the buffer.
+
+NAVIGATION ~
+- `j`/`k` or normal cursor movement
+- `Ctrl-n`/`Ctrl-p` - Jump to next/previous instance
+- `J`/`K` - Jump between instances (not lines)
+- `Tab`/`Shift-Tab` - Cycle through instances
+- `/` - Search within the BeamScope buffer
+- `Enter` - Execute operation on selected instance
+- `Esc` or `q` - Cancel operation
+
+SMART CURSOR POSITIONING ~
+BeamScope intelligently positions the view based on your cursor location:
+- Primary: Shows the text object at or just below your cursor
+- Fallback: If none below, shows the nearest one above
+- Benefit: Starts right where you're working, no scrolling needed
+
+This quality-of-life feature means you immediately see the most relevant
+text objects near your current position, making selection faster and more
+intuitive.
+
+CONFIGURATION ~
+BeamScope can be configured in the setup:
+>lua
+  require('beam').setup({
+    beam_scope = {
+      enabled = true,                    -- Enable BeamScope
+      scoped_text_objects = { '"', "'", -- Text objects to use with BeamScope
+        '`', '(', ')', '[', ']', '{', 
+        '}', '<', '>', 'b', 'B' },
+      window_width = 60,                 -- Maximum width of BeamScope window
+    }
+  })
+<
+
+NOTE ~
+BeamScope is incompatible with cross-buffer operations. When
+`cross_buffer.enabled = true`, BeamScope is automatically disabled.
 
 ==============================================================================
 TIPS & TRICKS                                                    *beam-tips*
