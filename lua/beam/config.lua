@@ -14,10 +14,11 @@ M.defaults = {
   },
   enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
   custom_text_objects = {},
-  auto_discover_text_objects = false, -- Auto-discover and register all available text objects
+  auto_discover_custom_text_objects = false, -- Auto-discover custom text objects from plugins (mini.ai, treesitter, etc.)
   show_discovery_notification = false, -- Show notification about discovered text objects
-  excluded_text_objects = {}, -- List of text object keys to exclude from discovery (e.g., {'q', 'z'})
+  excluded_text_objects = { '?' }, -- List of text object keys to exclude from discovery (e.g., {'q', 'z'}). ? is excluded by default as it's interactive
   excluded_motions = {}, -- List of motion keys to exclude from discovery (e.g., {'Q', 'R'})
+  resolved_conflicts = {}, -- List of text object keys where conflicts are intentional (e.g., {'m'})
   smart_highlighting = false, -- Enable real-time highlighting for delimiter-based text objects
   experimental = {
     dot_repeat = false,
@@ -33,33 +34,14 @@ M.defaults = {
 
 M.motions = {} -- Will be populated by discovery
 
+-- Registry of ALL active text objects (config + discovered)
+-- This is what actually gets used for mappings
+M.active_text_objects = {}
+
+-- Only keep beam-specific text objects
+-- Everything else will be auto-discovered from Vim built-ins or other plugins
 M.text_objects = {
-  ['"'] = 'double quotes',
-  ["'"] = 'single quotes',
-  ['`'] = 'backticks',
-  ['('] = 'parentheses',
-  [')'] = 'parentheses',
-  ['{'] = 'curly braces',
-  ['}'] = 'curly braces',
-  ['['] = 'square brackets',
-  [']'] = 'square brackets',
-  ['<'] = 'angle brackets',
-  ['>'] = 'angle brackets',
-  ['w'] = 'word',
-  ['W'] = 'WORD (space-delimited)',
-  ['b'] = 'parentheses block',
-  ['B'] = 'curly braces block',
-  ['l'] = 'line',
-  ['e'] = 'entire buffer',
-  ['t'] = 'HTML/XML tags',
-  ['p'] = 'paragraph',
-  ['s'] = 'sentence',
-  ['m'] = 'markdown code block',
-  ['i'] = 'indentation',
-  ['I'] = 'indentation with line above',
-  ['f'] = 'function',
-  ['c'] = 'class',
-  ['a'] = 'argument',
+  ['m'] = 'markdown code block', -- The only truly beam-specific text object (im/am)
 }
 
 M.operators = {
@@ -90,19 +72,40 @@ function M.setup(opts)
     }
   end
 
+  -- Backward compatibility: rename auto_discover_text_objects to auto_discover_custom_text_objects
+  if
+    opts
+    and opts.auto_discover_text_objects ~= nil
+    and opts.auto_discover_custom_text_objects == nil
+  then
+    M.current.auto_discover_custom_text_objects = opts.auto_discover_text_objects
+  end
+
   if M.current.custom_text_objects then
     M.text_objects = vim.tbl_extend('force', M.text_objects, M.current.custom_text_objects)
+  end
+
+  -- Initialize active_text_objects
+  -- Only use default text_objects if auto-discovery is disabled
+  if M.current.auto_discover_text_objects then
+    -- Start with empty, will be populated by discovery
+    M.active_text_objects = {}
+  else
+    -- Use defaults when discovery is disabled
+    M.active_text_objects = vim.tbl_deep_extend('force', {}, M.text_objects)
   end
 
   return M.current
 end
 
 function M.register_text_object(key, description)
-  M.text_objects[key] = description
+  -- Add to active registry, NOT to config
+  M.active_text_objects[key] = description
 end
 
 function M.register_text_objects(objects)
-  M.text_objects = vim.tbl_extend('force', M.text_objects, objects)
+  -- Add to active registry, NOT to config
+  M.active_text_objects = vim.tbl_extend('force', M.active_text_objects, objects)
 end
 
 return M

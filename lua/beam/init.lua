@@ -25,21 +25,41 @@ function M.setup(opts)
 
   mappings.setup()
 
-  -- Auto-discover text objects if enabled
-  if config.current.auto_discover_text_objects then
+  -- Always register Vim's built-in text objects
+  local discovery = require('beam.text_object_discovery')
+  discovery.register_builtin_text_objects()
+
+  -- Auto-discover custom text objects from plugins if enabled
+  if config.current.auto_discover_custom_text_objects then
     -- Delay discovery slightly to allow plugins to load
     vim.defer_fn(function()
-      local discovery = require('beam.text_object_discovery')
       local result = discovery.auto_register_text_objects({
         conflict_resolution = config.current.discovery_conflict_resolution or 'skip',
+        show_conflicts = false, -- Don't show conflicts during registration
       })
-      if config.current.show_discovery_notification and result then
+
+      -- Check for unresolved conflicts after registration
+      local unresolved_count, resolved_count = discovery.check_unresolved_conflicts()
+
+      -- Show appropriate notification based on what happened
+      if unresolved_count > 0 then
+        -- Only show warning if there are actual unresolved conflicts
         local msg = string.format(
-          '[beam.nvim] Registered %d new text objects, %d motions (%d total available)',
+          'Beam.nvim: Found %d unresolved text object conflicts. Run :checkhealth beam for details.',
+          unresolved_count
+        )
+        vim.notify(msg, vim.log.levels.WARN, { title = 'Beam.nvim' })
+      elseif config.current.show_discovery_notification and result then
+        -- Show success message only if requested and no issues
+        local msg = string.format(
+          '[beam.nvim] Discovered %d custom text objects, %d motions (%d total available)',
           result.registered or 0,
           result.motions_registered or 0,
           (result.total or 0) + (result.motions_total or 0)
         )
+        if resolved_count > 0 then
+          msg = msg .. string.format(' (%d conflicts marked as resolved)', resolved_count)
+        end
         vim.notify(msg, vim.log.levels.INFO)
       end
     end, 500) -- Wait for lazy-loaded plugins
@@ -66,8 +86,8 @@ function M.setup(opts)
 end
 
 function M.is_text_object_registered(key)
-  -- Check both runtime registrations and config
-  return M.registered_text_objects[key] ~= nil or config.text_objects[key] ~= nil
+  -- Check active text objects (includes both config and discovered)
+  return config.active_text_objects[key] ~= nil
 end
 
 function M.register_text_object(key, description)

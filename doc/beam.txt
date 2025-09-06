@@ -139,9 +139,10 @@ BASIC SETUP ~
       enabled = false,                -- Enable cross-buffer operations
       fuzzy_finder = 'telescope'      -- Fuzzy finder (required for cross-buffer)
     },
-    auto_discover_text_objects = true, -- Auto-discover all text objects
+    auto_discover_custom_text_objects = true, -- Auto-discover custom text objects from plugins
     excluded_text_objects = {},      -- Exclude text objects (e.g., {'q'})
     excluded_motions = {},            -- Exclude motions (e.g., {'Q', 'R'})
+    resolved_conflicts = {},         -- Mark conflicts as resolved (e.g., {'m'})
     smart_highlighting = false,       -- Context-aware search highlighting
   })
 <<

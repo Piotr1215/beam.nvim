@@ -53,7 +53,8 @@ describe('beam.nvim', function()
     it('allows registering custom text objects', function()
       beam.register_text_object('z', 'test object')
       local config_module = require('beam.config')
-      assert.equals('test object', config_module.text_objects['z'])
+      -- Check active_text_objects instead of text_objects
+      assert.equals('test object', config_module.active_text_objects['z'])
     end)
   end)
 

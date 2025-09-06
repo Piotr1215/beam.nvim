@@ -185,10 +185,11 @@ require('beam').setup({
     include_hidden = false,          -- Include hidden buffers
   },
   enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
-  auto_discover_text_objects = true, -- Auto-discover all available text objects
+  auto_discover_custom_text_objects = true, -- Auto-discover custom text objects from plugins (mini.ai, treesitter, etc.)
   show_discovery_notification = true,-- Show notification about discovered objects
   excluded_text_objects = {},       -- Exclude specific text objects (e.g., {'q', 'z'})
   excluded_motions = {},             -- Exclude specific motions (e.g., {'Q', 'R'})
+  resolved_conflicts = {},          -- Mark conflicts as intentional (e.g., {'m'})
   smart_highlighting = false,        -- Context-aware search highlighting
 })
 ```
@@ -272,10 +273,15 @@ require('beam').setup({
 
 ### Auto-Discovery
 
-With `auto_discover_text_objects = true`, beam automatically discovers and registers:
+Beam always includes Vim's built-in text objects (quotes, brackets, words, paragraphs, etc.).
 
+With `auto_discover_custom_text_objects = true`, beam additionally discovers and registers:
+
+- **mini.ai** - Complete integration with ALL text objects:
+  - Built-in objects: `a` (argument), `f` (function call), `t` (tag), `q` (quotes), `b` (brackets)
+  - Your custom text objects: Functions, patterns, and aliases defined in mini.ai config
+  - Note: `?` (user prompt) is excluded by default as it requires interactive input
 - **nvim-various-textobjs** - `iq` (any quote), `ih` (headers), `L` (URL motion)
-- **mini.ai** - All your custom text objects  
 - **treesitter-textobjects** - `if` (function), `ic` (class), etc.
 - **Built-in Vim** - All standard text objects
 
@@ -318,11 +324,32 @@ You can exclude specific text objects or motions from auto-discovery:
 
 ```lua
 require('beam').setup({
-  auto_discover_text_objects = true,
+  auto_discover_custom_text_objects = true,
   excluded_text_objects = { 'q', 'z' },  -- Exclude iq/aq and iz/az
   excluded_motions = { 'Q', 'R' },       -- Exclude Q and R motions
 })
 ```
+
+#### Handling Conflicts
+
+When beam discovers text objects that conflict with its own or between plugins, you have several options:
+
+```lua
+require('beam').setup({
+  -- Mark conflicts as intentional (both implementations coexist)
+  resolved_conflicts = { 'm' },  -- e.g., beam's im/am AND your custom im/am both work
+  
+  -- Or exclude the conflicting text object entirely
+  excluded_text_objects = { 'f' },  -- Skip if/af discovery
+  
+  -- Or override with your preferred version
+  custom_text_objects = { 
+    f = 'function (mini.ai)'  -- Use mini.ai's version instead
+  },
+})
+```
+
+Run `:checkhealth beam` to see all conflicts and get specific resolution suggestions.
 
 ### Statusline Integration
 
@@ -363,10 +390,11 @@ require('beam').setup({
   
   -- Text object configuration
   enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
-  auto_discover_text_objects = true, -- Discover text objects from all plugins
+  auto_discover_custom_text_objects = true, -- Discover custom text objects from plugins (mini.ai, treesitter, etc.)
   show_discovery_notification = true,-- Notify about discovered objects
   excluded_text_objects = {},       -- List of text object keys to exclude (e.g., {'q', 'z'})
   excluded_motions = {},             -- List of motion keys to exclude (e.g., {'Q', 'R'})
+  resolved_conflicts = {},          -- Mark conflicts as intentional (e.g., {'m'})
   custom_text_objects = {},         -- Define custom text objects (key = description pairs)
   
   -- Search behavior

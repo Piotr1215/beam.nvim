@@ -194,6 +194,70 @@ function M.is_text_object_available(text_obj)
   return false, nil
 end
 
+-- Discover all mini.ai text objects (built-in and custom)
+function M.discover_mini_ai_text_objects()
+  -- Check if mini.ai is available
+  local has_mini_ai = vim.fn.exists('*mini#ai#config') == 1 or pcall(require, 'mini.ai')
+  if not has_mini_ai then
+    return {}, false -- Return empty table and false to indicate mini.ai not found
+  end
+
+  -- Try to load mini.ai
+  local ok, mini_ai = pcall(require, 'mini.ai')
+  if not ok then
+    return {}, false
+  end
+
+  local text_objects = {}
+
+  -- Define known built-in text objects with descriptions
+  local builtin_descriptions = {
+    ['?'] = 'user prompt',
+    ['a'] = 'argument',
+    ['f'] = 'function call',
+    ['t'] = 'tag',
+    ['q'] = 'any quote',
+    ['b'] = 'any bracket',
+  }
+
+  -- First, add built-in text objects that mini.ai provides
+  -- These are always available when mini.ai is loaded
+  for key, desc in pairs(builtin_descriptions) do
+    -- Check if not disabled in custom_textobjects
+    local custom = mini_ai.config and mini_ai.config.custom_textobjects
+    if not custom or custom[key] ~= false then
+      text_objects['i' .. key] = 'inner ' .. desc .. ' (mini.ai)'
+      text_objects['a' .. key] = 'around ' .. desc .. ' (mini.ai)'
+    end
+  end
+
+  -- Then add custom text objects
+  local config = mini_ai.config
+  if config and config.custom_textobjects then
+    for key, spec in pairs(config.custom_textobjects) do
+      -- Skip disabled text objects (false values) and already processed builtins
+      if spec ~= false and not builtin_descriptions[key] then
+        local desc = 'custom'
+
+        -- Identify the type of text object
+        if type(spec) == 'function' then
+          desc = 'custom function'
+        elseif type(spec) == 'table' then
+          desc = 'custom pattern'
+        elseif type(spec) == 'string' then
+          desc = 'custom alias'
+        end
+
+        -- Add both inner and around variants
+        text_objects['i' .. key] = 'inner ' .. desc .. ' (mini.ai)'
+        text_objects['a' .. key] = 'around ' .. desc .. ' (mini.ai)'
+      end
+    end
+  end
+
+  return text_objects, true -- Return objects and true to indicate mini.ai was found
+end
+
 -- Discover all available text objects
 function M.discover_text_objects()
   -- Ensure plugins are loaded first
@@ -212,10 +276,36 @@ function M.discover_text_objects()
     excluded['a' .. key] = true
   end
 
-  -- First, check our curated list of common text objects
+  -- FIRST: Try to discover mini.ai text objects (if available)
+  -- These should take priority over beam's hardcoded defaults
+  local mini_ai_objects, has_mini_ai = M.discover_mini_ai_text_objects()
+  if has_mini_ai and next(mini_ai_objects) then
+    -- mini.ai is available and has objects
+    for keymap, desc in pairs(mini_ai_objects) do
+      if not excluded[keymap] and not excluded[keymap:sub(2)] and not seen[keymap] then
+        -- Check if this is a built-in mini.ai object that should override beam's default
+        local suffix = keymap:sub(2)
+        local is_mini_builtin = keymap:match('^[ia][bfqta]$') -- mini.ai built-ins: b, f, q, t, a
+
+        table.insert(available, {
+          keymap = keymap,
+          desc = desc,
+          source = 'mini.ai',
+          priority = is_mini_builtin and 1 or 2, -- Higher priority for mini.ai built-ins
+        })
+        seen[keymap] = true
+      end
+    end
+  end
+
+  -- Then, check our curated list of common text objects
   for _, text_obj in ipairs(COMMON_TEXT_OBJECTS) do
-    -- Skip if excluded
-    if not excluded[text_obj.keymap] and not excluded[text_obj.keymap:sub(2)] then
+    -- Skip if excluded or already discovered from mini.ai
+    if
+      not excluded[text_obj.keymap]
+      and not excluded[text_obj.keymap:sub(2)]
+      and not seen[text_obj.keymap]
+    then
       local is_available, source = M.is_text_object_available(text_obj.keymap)
       if is_available and not seen[text_obj.keymap] then
         text_obj.source = source
@@ -236,10 +326,36 @@ function M.discover_text_objects()
         local suffix = lhs:sub(2)
         -- Skip if suffix contains special characters that don't make sense
         if not suffix:match('[^%w%p]') and #suffix <= 2 then
+          -- Try to identify the source from the description
+          local source = 'mapped'
+          local desc = map.desc or (first == 'i' and 'inner ' or 'around ') .. suffix
+
+          -- Identify source based on common patterns in descriptions
+          if
+            desc:match('treesitter')
+            or desc:match('TS')
+            or desc:match('function')
+            or desc:match('class')
+            or desc:match('parameter')
+            or desc:match('conditional')
+          then
+            source = 'treesitter'
+          elseif
+            desc:match('various')
+            or desc:match('indentation')
+            or desc:match('subword')
+            or desc:match('diagnostic')
+            or desc:match('entire')
+            or desc:match('value')
+            or desc:match('key')
+          then
+            source = 'various'
+          end
+
           table.insert(available, {
             keymap = lhs,
-            desc = map.desc or (first == 'i' and 'inner ' or 'around ') .. suffix,
-            source = 'mapped',
+            desc = desc,
+            source = source,
           })
           seen[lhs] = true
         end
@@ -334,6 +450,56 @@ function M.discover_motions()
   return motions
 end
 
+-- Find an alternative 2-letter suffix based on source
+-- Priority: standard (no suffix), mini.ai (m), treesitter (t), various (v), other (x)
+function M.find_alternative_suffix(original_suffix, source)
+  -- Determine suffix based on source
+  local source_suffix = 'm' -- default to mini.ai
+
+  if source == 'mini.ai' then
+    source_suffix = 'm'
+  elseif source == 'treesitter' or source:match('treesitter') then
+    source_suffix = 't'
+  elseif source == 'various' or source:match('various') then
+    source_suffix = 'v'
+  elseif source == 'targets' then
+    source_suffix = 'g' -- g for tarGets
+  else
+    source_suffix = 'x' -- x for unknown/other
+  end
+
+  -- Create the alternative: original + source suffix
+  local alt = original_suffix .. source_suffix
+
+  -- Check if this alternative is available
+  local test_i = 'i' .. alt
+  local test_a = 'a' .. alt
+
+  for _, map in ipairs(vim.api.nvim_get_keymap('o')) do
+    if map.lhs == test_i or map.lhs == test_a then
+      -- Already taken, try with a number
+      for i = 2, 9 do
+        alt = original_suffix .. source_suffix .. i
+        test_i = 'i' .. alt
+        test_a = 'a' .. alt
+        local found = false
+        for _, m in ipairs(vim.api.nvim_get_keymap('o')) do
+          if m.lhs == test_i or m.lhs == test_a then
+            found = true
+            break
+          end
+        end
+        if not found then
+          return alt
+        end
+      end
+      return nil -- Couldn't find alternative
+    end
+  end
+
+  return alt
+end
+
 -- Auto-register discovered text objects with beam
 function M.auto_register_text_objects(options)
   options = options or {}
@@ -344,6 +510,32 @@ function M.auto_register_text_objects(options)
   local registered = 0
   local skipped = 0
   local conflicts = {}
+
+  -- Sort by priority:
+  -- 1. builtin - Vim's native text objects should take precedence
+  -- 2. mini.ai - Popular plugin with good text objects
+  -- 3. treesitter - Code-aware text objects
+  -- 4. various - Additional text objects
+  -- 5. targets - Extended text objects
+  -- 6. mapped - Other mapped text objects
+  local priority_order = {
+    ['builtin'] = 1, -- Built-ins should have highest priority
+    ['mini.ai'] = 2,
+    ['treesitter'] = 3,
+    ['various'] = 4,
+    ['targets'] = 5,
+    ['mapped'] = 6,
+  }
+
+  table.sort(available, function(a, b)
+    local a_priority = priority_order[a.source] or 99
+    local b_priority = priority_order[b.source] or 99
+    if a_priority ~= b_priority then
+      return a_priority < b_priority
+    end
+    -- Same priority, sort by keymap for consistency
+    return a.keymap < b.keymap
+  end)
 
   -- Track which suffixes we've seen (to handle i/a pairs)
   local seen_suffixes = {}
@@ -357,12 +549,20 @@ function M.auto_register_text_objects(options)
     if not seen_suffixes[suffix] then
       seen_suffixes[suffix] = true
 
-      -- Check if this text object is already configured in beam
+      -- Check for conflicts but don't create alternatives
       if beam.is_text_object_registered(suffix) then
-        -- Already registered in beam's config, skip
+        -- Conflict detected - record it but don't register
+        local existing = config.text_objects[suffix] or 'unknown'
+        table.insert(conflicts, {
+          key = suffix,
+          existing = existing,
+          existing_source = 'config', -- or could detect source
+          new = text_obj.desc,
+          new_source = text_obj.source or 'unknown',
+        })
         skipped = skipped + 1
       else
-        -- Not in beam's config, safe to add
+        -- No conflict - register normally
         if beam.register_text_object(suffix, text_obj.desc) then
           registered = registered + 1
         else
@@ -388,7 +588,7 @@ function M.auto_register_text_objects(options)
     require('beam.mappings').setup()
   end
 
-  return {
+  local result = {
     registered = registered,
     skipped = skipped,
     total = #available,
@@ -396,6 +596,175 @@ function M.auto_register_text_objects(options)
     motions_registered = motions_registered,
     motions_total = vim.tbl_count(motions),
   }
+
+  -- Show conflict report if there are conflicts
+  if #conflicts > 0 and options.show_conflicts ~= false then
+    M.show_conflict_report(conflicts)
+  end
+
+  return result
+end
+
+-- Check for unresolved conflicts and return count
+function M.check_unresolved_conflicts()
+  local conflicts = M.get_conflict_report()
+  if not conflicts or #conflicts == 0 then
+    return 0, 0 -- no conflicts at all
+  end
+
+  local config = require('beam.config')
+  local resolved_conflicts = config.current.resolved_conflicts or {}
+  local unresolved_count = 0
+  local resolved_count = 0
+
+  for _, conflict in ipairs(conflicts) do
+    if vim.tbl_contains(resolved_conflicts, conflict.suffix) then
+      resolved_count = resolved_count + 1
+    else
+      unresolved_count = unresolved_count + 1
+    end
+  end
+
+  return unresolved_count, resolved_count
+end
+
+-- Show a nice conflict report to the user
+function M.show_conflict_report(conflicts)
+  -- This is now deprecated in favor of check_unresolved_conflicts
+  -- but kept for compatibility
+  local unresolved_count = M.check_unresolved_conflicts()
+
+  if unresolved_count == 0 then
+    return
+  end
+
+  local msg = string.format(
+    'Beam.nvim: Found %d unresolved text object conflicts. Run :checkhealth beam for details.',
+    unresolved_count
+  )
+
+  if vim.notify then
+    vim.notify(msg, vim.log.levels.WARN, { title = 'Beam.nvim' })
+  else
+    print(msg)
+  end
+end
+
+-- Register Vim's built-in text objects (always available)
+function M.register_builtin_text_objects()
+  local beam = require('beam')
+  local registered = 0
+
+  -- These are Vim's built-in text objects - always available
+  local builtin_objects = {
+    ['"'] = 'double quoted string',
+    ["'"] = 'single quoted string',
+    ['`'] = 'backticks',
+    ['('] = 'parentheses',
+    [')'] = 'parentheses',
+    ['['] = 'square brackets',
+    [']'] = 'square brackets',
+    ['{'] = 'curly braces',
+    ['}'] = 'curly braces',
+    ['<'] = 'angle brackets',
+    ['>'] = 'angle brackets',
+    ['w'] = 'word',
+    ['W'] = 'WORD',
+    ['s'] = 'sentence',
+    ['p'] = 'paragraph',
+    ['b'] = 'parentheses block',
+    ['B'] = 'curly braces block',
+    ['t'] = 'tag block',
+  }
+
+  for key, desc in pairs(builtin_objects) do
+    if beam.register_text_object(key, desc) then
+      registered = registered + 1
+    end
+  end
+
+  return registered
+end
+
+-- Get conflict report for checkhealth
+function M.get_conflict_report()
+  local available = M.discover_text_objects()
+  local config = require('beam.config')
+  local conflicts = {}
+  local seen = {}
+
+  -- Group by suffix AND source to find real conflicts
+  -- A conflict only exists when different SOURCES provide the same text object
+  local by_suffix = {}
+  for _, obj in ipairs(available) do
+    local suffix = obj.keymap:sub(2)
+    local prefix = obj.keymap:sub(1, 1) -- 'i' or 'a'
+
+    if not by_suffix[suffix] then
+      by_suffix[suffix] = {}
+    end
+
+    -- Group by source to detect real conflicts
+    local source_key = obj.source or 'unknown'
+    if not by_suffix[suffix][source_key] then
+      by_suffix[suffix][source_key] = {
+        source = source_key,
+        desc = obj.desc,
+        variants = {},
+      }
+    end
+    by_suffix[suffix][source_key].variants[prefix] = true
+  end
+
+  -- Only check config text objects if custom discovery is disabled
+  -- When custom discovery is enabled, config defaults shouldn't be considered
+  if not config.current.auto_discover_custom_text_objects then
+    for key, desc in pairs(config.text_objects) do
+      if not by_suffix[key] then
+        by_suffix[key] = {}
+      end
+      if not by_suffix[key]['beam-config'] then
+        by_suffix[key]['beam-config'] = {
+          source = 'beam-config',
+          desc = desc,
+          variants = { i = true, a = true }, -- Assume both variants
+        }
+      end
+    end
+  end
+
+  -- Find real conflicts - where multiple SOURCES provide the same text object
+  for suffix, sources in pairs(by_suffix) do
+    local source_count = vim.tbl_count(sources)
+    if source_count > 1 then
+      -- Convert to list format for compatibility
+      local source_list = {}
+      for source_name, info in pairs(sources) do
+        -- Create entries for each variant
+        if info.variants.i then
+          table.insert(source_list, {
+            keymap = 'i' .. suffix,
+            desc = info.desc:match('^inner ') and info.desc or ('inner ' .. info.desc),
+            source = source_name,
+          })
+        end
+        if info.variants.a then
+          table.insert(source_list, {
+            keymap = 'a' .. suffix,
+            desc = info.desc:match('^around ') and info.desc or ('around ' .. info.desc),
+            source = source_name,
+          })
+        end
+      end
+
+      table.insert(conflicts, {
+        suffix = suffix,
+        sources = source_list,
+      })
+    end
+  end
+
+  return conflicts
 end
 
 return M

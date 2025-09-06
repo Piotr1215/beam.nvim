@@ -127,4 +127,184 @@ describe('beam.nvim text object discovery', function()
       vim.api.nvim_del_keymap('o', 'if')
     end)
   end)
+
+  describe('mini.ai text object discovery', function()
+    local discovery
+
+    before_each(function()
+      -- Reset module state
+      package.loaded['beam.text_object_discovery'] = nil
+      package.loaded['mini.ai'] = nil
+      discovery = require('beam.text_object_discovery')
+    end)
+
+    it('handles missing mini.ai gracefully', function()
+      -- When mini.ai is not installed
+      local objects, has_mini = discovery.discover_mini_ai_text_objects()
+
+      assert.is_table(objects, 'Should return empty table when mini.ai not found')
+      assert.is_false(has_mini, 'Should indicate mini.ai not found')
+      assert.equals(vim.tbl_count(objects), 0, 'Should return no objects when mini.ai missing')
+    end)
+
+    it('discovers mini.ai custom text objects when available', function()
+      -- Mock mini.ai with some example custom text objects
+      package.loaded['mini.ai'] = {
+        config = {
+          custom_textobjects = {
+            ['*'] = { 'pattern1', 'pattern2' }, -- Pattern-based (like markdown bold)
+            ['z'] = false, -- Disabled text object (should be skipped)
+            ['x'] = 'alias', -- String alias
+            ['F'] = function()
+              return nil
+            end, -- Function-based
+          },
+        },
+      }
+
+      local objects, has_mini = discovery.discover_mini_ai_text_objects()
+
+      assert.is_true(has_mini, 'Should detect mini.ai when available')
+      assert.is_table(objects, 'Should return table of objects')
+
+      -- Check discovered objects (generic, not assuming specific descriptions)
+      assert.is_not_nil(objects['i*'], 'Should discover pattern-based object')
+      assert.is_not_nil(objects['a*'], 'Should discover pattern-based object')
+      assert.is_not_nil(objects['ix'], 'Should discover alias object')
+      assert.is_not_nil(objects['ax'], 'Should discover alias object')
+      assert.is_not_nil(objects['iF'], 'Should discover function-based object')
+      assert.is_not_nil(objects['aF'], 'Should discover function-based object')
+      assert.is_nil(objects['iz'], 'Should not include disabled text objects')
+      assert.is_nil(objects['az'], 'Should not include disabled text objects')
+
+      -- Check that descriptions exist and are reasonable
+      assert.truthy(
+        string.find(objects['i*'], 'inner'),
+        'Inner variant should have inner in description'
+      )
+      assert.truthy(
+        string.find(objects['a*'], 'around'),
+        'Around variant should have around in description'
+      )
+    end)
+
+    it('handles different types of text object specifications', function()
+      package.loaded['mini.ai'] = {
+        config = {
+          custom_textobjects = {
+            ['F'] = function() end, -- Function (uppercase to avoid conflict with builtin f)
+            ['p'] = { 'pattern' }, -- Table/pattern
+            ['x'] = 'alias', -- String/alias (changed from 'a' which is builtin)
+            ['d'] = false, -- Disabled
+          },
+        },
+      }
+
+      local objects = discovery.discover_mini_ai_text_objects()
+
+      -- Functions should be marked as such
+      assert.is_not_nil(objects['iF'], 'Function object should exist')
+      assert.truthy(string.find(objects['iF'], 'function'), 'Function objects should be identified')
+      -- Patterns should be marked as such
+      assert.is_not_nil(objects['ip'], 'Pattern object should exist')
+      assert.truthy(string.find(objects['ip'], 'pattern'), 'Pattern objects should be identified')
+      -- Aliases should be marked as such
+      assert.is_not_nil(objects['ix'], 'Alias object should exist')
+      assert.truthy(string.find(objects['ix'], 'alias'), 'Alias objects should be identified')
+      -- Disabled should not appear
+      assert.is_nil(objects['id'], 'Disabled objects should not be discovered')
+    end)
+
+    it('integrates mini.ai objects into full discovery', function()
+      -- Mock mini.ai with a simple custom object
+      package.loaded['mini.ai'] = {
+        config = {
+          custom_textobjects = {
+            ['g'] = { 'pattern' }, -- Just one custom object for testing
+          },
+        },
+      }
+
+      local all_objects = discovery.discover_text_objects()
+
+      -- Find our custom object in the full list
+      local found_custom = false
+
+      for _, obj in ipairs(all_objects) do
+        if obj.keymap == 'ig' and obj.source == 'mini.ai' then
+          found_custom = true
+          assert.truthy(
+            string.find(obj.desc, 'custom'),
+            'Custom object should have appropriate description'
+          )
+          break
+        end
+      end
+
+      assert.is_true(found_custom, 'Should include mini.ai custom objects in full discovery')
+    end)
+
+    it('respects exclusion list for mini.ai objects', function()
+      -- Mock mini.ai
+      package.loaded['mini.ai'] = {
+        config = {
+          custom_textobjects = {
+            ['q'] = { 'pattern' },
+            ['x'] = { 'another' },
+          },
+        },
+      }
+
+      -- Mock config with exclusions
+      local config = require('beam.config')
+      config.current = {
+        excluded_text_objects = { 'q' }, -- Exclude 'q' but not 'x'
+      }
+
+      local all_objects = discovery.discover_text_objects()
+
+      -- Check that excluded objects are not present
+      local found_q = false
+      local found_x = false
+
+      for _, obj in ipairs(all_objects) do
+        if (obj.keymap == 'iq' or obj.keymap == 'aq') and obj.source == 'mini.ai' then
+          found_q = true
+        elseif (obj.keymap == 'ix' or obj.keymap == 'ax') and obj.source == 'mini.ai' then
+          found_x = true
+        end
+      end
+
+      assert.is_false(found_q, 'Should not include excluded mini.ai object q')
+      assert.is_true(found_x, 'Should include non-excluded mini.ai object x')
+    end)
+
+    it('returns proper status indicator', function()
+      -- Test 1: No mini.ai
+      package.loaded['mini.ai'] = nil
+      local _, has_mini = discovery.discover_mini_ai_text_objects()
+      assert.is_false(has_mini, 'Should return false when mini.ai not available')
+
+      -- Test 2: mini.ai present but no custom objects
+      package.loaded['mini.ai'] = {
+        config = {}, -- No custom_textobjects field
+      }
+      local _, has_mini2 = discovery.discover_mini_ai_text_objects()
+      assert.is_true(
+        has_mini2,
+        'Should return true when mini.ai present even without custom objects'
+      )
+
+      -- Test 3: mini.ai with custom objects
+      package.loaded['mini.ai'] = {
+        config = {
+          custom_textobjects = {
+            ['x'] = 'test',
+          },
+        },
+      }
+      local _, has_mini3 = discovery.discover_mini_ai_text_objects()
+      assert.is_true(has_mini3, 'Should return true when mini.ai present with custom objects')
+    end)
+  end)
 end)
