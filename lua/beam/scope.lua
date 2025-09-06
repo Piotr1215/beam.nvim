@@ -2,6 +2,8 @@ local M = {}
 
 local config = require('beam.config')
 local operators = require('beam.operators')
+local custom_text_objects = require('beam.custom_text_objects')
+local custom_motions = require('beam.custom_motions')
 
 M.scope_state = {
   buffer = nil,
@@ -82,8 +84,24 @@ function M.find_text_objects(textobj_key, source_buf)
     end
   end
 
-  -- Handle markdown headers specially
-  if textobj_key == 'h' then
+  -- Check if it's a custom motion
+  if custom_motions.is_custom(textobj_key) then
+    local instances = custom_motions.find_all(textobj_key, source_buf)
+    if need_restore then
+      vim.api.nvim_set_current_win(original_win)
+    end
+    return instances
+
+  -- Check if it's a custom text object
+  elseif custom_text_objects.is_custom(textobj_key) then
+    local instances = custom_text_objects.find_all(textobj_key, source_buf)
+    if need_restore then
+      vim.api.nvim_set_current_win(original_win)
+    end
+    return instances
+
+  -- Handle markdown headers specially (DEPRECATED - now in custom_text_objects)
+  elseif false and textobj_key == 'h' then
     local lines = vim.api.nvim_buf_get_lines(source_buf, 0, -1, false)
     local headers = {}
 
@@ -285,8 +303,15 @@ function M.find_text_objects(textobj_key, source_buf)
         vim.api.nvim_win_set_cursor(0, pos)
 
         local ok = pcall(function()
-          -- Try to yank the inner text object
-          vim.cmd('silent! normal! "ayi' .. search_key)
+          -- For single-letter motions, use the motion directly
+          -- For text objects, use yi + key
+          if #textobj_key == 1 and textobj_key:match('[A-Z]') then
+            -- Single uppercase letter is likely a motion (like L for URL)
+            vim.cmd('silent! normal! "ay' .. textobj_key)
+          else
+            -- Regular text object with inner variant
+            vim.cmd('silent! normal! "ayi' .. search_key)
+          end
 
           -- Get the selection marks
           local start_pos = vim.fn.getpos("'[")
@@ -431,69 +456,61 @@ end
 function M.format_instance_lines(instance, index, textobj_key)
   local lines = {}
 
-  if textobj_key == 'h' then
-    -- For markdown headers, just show the header line itself
-    table.insert(lines, instance.preview or instance.first_line or '')
-  elseif textobj_key == 'm' then
-    -- For markdown code blocks, show the complete content
-    local lang = instance.language and instance.language ~= '' and instance.language or ''
-    table.insert(lines, string.format('```%s', lang))
+  -- Check if it's a custom text object with a format function
+  local custom_obj = custom_text_objects.get(textobj_key)
+  if custom_obj and custom_obj.format then
+    return custom_obj.format(instance)
+  end
 
-    -- Show ALL content lines - no truncation
-    if instance.preview then
-      -- Split preview into lines and add all of them
-      for line in instance.preview:gmatch('[^\n]+') do
-        table.insert(lines, line)
-      end
+  -- Check if it's a custom motion with a format function
+  local custom_motion = custom_motions.get(textobj_key)
+  if custom_motion and custom_motion.format then
+    return custom_motion.format(instance)
+  end
+
+  -- For built-in text objects, show the complete content with delimiters
+  local preview = instance.first_line or instance.preview or ''
+
+  -- Determine delimiters based on text object type
+  local left_delim, right_delim = '', ''
+  if textobj_key == '"' then
+    left_delim, right_delim = '"', '"'
+  elseif textobj_key == "'" then
+    left_delim, right_delim = "'", "'"
+  elseif textobj_key == '`' then
+    left_delim, right_delim = '`', '`'
+  elseif textobj_key == '(' or textobj_key == ')' or textobj_key == 'b' then
+    left_delim, right_delim = '(', ')'
+  elseif textobj_key == '[' or textobj_key == ']' then
+    left_delim, right_delim = '[', ']'
+  elseif textobj_key == '{' or textobj_key == '}' or textobj_key == 'B' then
+    left_delim, right_delim = '{', '}'
+  elseif textobj_key == '<' or textobj_key == '>' then
+    left_delim, right_delim = '<', '>'
+  end
+
+  -- Handle multiline content properly
+  if preview:find('\n') then
+    local preview_lines = {}
+    for line in preview:gmatch('[^\n]+') do
+      table.insert(preview_lines, line)
     end
 
-    -- Add closing fence
-    table.insert(lines, '```')
+    -- Add delimiters to first and last lines only
+    if #preview_lines > 0 and left_delim ~= '' then
+      preview_lines[1] = left_delim .. preview_lines[1]
+      preview_lines[#preview_lines] = preview_lines[#preview_lines] .. right_delim
+    end
+
+    for _, line in ipairs(preview_lines) do
+      table.insert(lines, line)
+    end
   else
-    -- For other text objects, show the complete content with delimiters
-    local preview = instance.first_line or instance.preview or ''
-
-    -- Determine delimiters based on text object type
-    local left_delim, right_delim = '', ''
-    if textobj_key == '"' then
-      left_delim, right_delim = '"', '"'
-    elseif textobj_key == "'" then
-      left_delim, right_delim = "'", "'"
-    elseif textobj_key == '`' then
-      left_delim, right_delim = '`', '`'
-    elseif textobj_key == '(' or textobj_key == ')' or textobj_key == 'b' then
-      left_delim, right_delim = '(', ')'
-    elseif textobj_key == '[' or textobj_key == ']' then
-      left_delim, right_delim = '[', ']'
-    elseif textobj_key == '{' or textobj_key == '}' or textobj_key == 'B' then
-      left_delim, right_delim = '{', '}'
-    elseif textobj_key == '<' or textobj_key == '>' then
-      left_delim, right_delim = '<', '>'
-    end
-
-    -- Handle multiline content properly
-    if preview:find('\n') then
-      local preview_lines = {}
-      for line in preview:gmatch('[^\n]+') do
-        table.insert(preview_lines, line)
-      end
-
-      -- Add delimiters to first and last lines only
-      if #preview_lines > 0 and left_delim ~= '' then
-        preview_lines[1] = left_delim .. preview_lines[1]
-        preview_lines[#preview_lines] = preview_lines[#preview_lines] .. right_delim
-      end
-
-      for _, line in ipairs(preview_lines) do
-        table.insert(lines, line)
-      end
+    -- Single line - add delimiters if applicable
+    if left_delim ~= '' then
+      table.insert(lines, left_delim .. preview .. right_delim)
     else
-      -- Single line - add delimiters if applicable
-      if left_delim ~= '' then
-        table.insert(lines, left_delim .. preview .. right_delim)
-      else
-        table.insert(lines, preview)
-      end
+      table.insert(lines, preview)
     end
   end
 
@@ -652,76 +669,81 @@ function M.execute_operation(line_num)
   vim.api.nvim_win_set_cursor(0, { instance.start_line, instance.start_col })
 
   -- Execute the actual text object operation
-  local textobj_key = textobj:sub(2)
+  local textobj_key = #textobj == 1 and textobj or textobj:sub(2)
+  local variant = #textobj > 1 and textobj:sub(1, 1) or nil -- 'i' or 'a' for text objects
 
-  if textobj_key == 'h' then
-    -- For markdown headers, operate on the header and its content
-    if textobj == 'ih' then
-      -- Inner header (content without the header line itself)
-      if instance.end_line > instance.start_line then
-        -- Move to line after header
-        vim.cmd('normal! ' .. (instance.start_line + 1) .. 'G')
+  -- Check for custom implementations
+  if custom_text_objects.is_custom(textobj_key) then
+    -- Get the custom object definition
+    local custom_obj = custom_text_objects.get(textobj_key)
+    -- Get the selection bounds from the custom text object
+    local bounds = custom_text_objects.select(textobj_key, instance, action, variant)
+    if bounds then
+      vim.api.nvim_win_set_cursor(0, bounds.start)
+
+      -- Determine visual mode from object metadata
+      local visual_mode = custom_obj and custom_obj.visual_mode or 'characterwise'
+
+      if visual_mode == 'linewise' then
+        -- Use linewise visual mode
         if action == 'yank' then
-          vim.cmd('normal! V' .. instance.end_line .. 'Gy')
+          vim.cmd(string.format('normal! V%dGy', bounds.end_[1]))
         elseif action == 'delete' then
-          vim.cmd('normal! V' .. instance.end_line .. 'Gd')
+          vim.cmd(string.format('normal! V%dGd', bounds.end_[1]))
         elseif action == 'change' then
-          vim.cmd('normal! V' .. instance.end_line .. 'Gc')
+          vim.cmd(string.format('normal! V%dGc', bounds.end_[1]))
           vim.cmd('startinsert')
         elseif action == 'visual' then
-          vim.cmd('normal! V' .. instance.end_line .. 'G')
+          vim.cmd(string.format('normal! V%dG', bounds.end_[1]))
         end
       else
-        -- No content, just operate on the header line
+        -- Use characterwise visual mode (default)
         if action == 'yank' then
-          vim.cmd('normal! yy')
+          vim.cmd(string.format('normal! v%dG%d|y', bounds.end_[1], bounds.end_[2]))
         elseif action == 'delete' then
-          vim.cmd('normal! dd')
+          vim.cmd(string.format('normal! v%dG%d|d', bounds.end_[1], bounds.end_[2]))
         elseif action == 'change' then
-          vim.cmd('normal! cc')
+          vim.cmd(string.format('normal! v%dG%d|c', bounds.end_[1], bounds.end_[2]))
           vim.cmd('startinsert')
         elseif action == 'visual' then
-          vim.cmd('normal! V')
+          vim.cmd(string.format('normal! v%dG%d|', bounds.end_[1], bounds.end_[2]))
         end
       end
-    else -- 'ah'
-      -- Around header (header line + all content)
-      if action == 'yank' then
-        vim.cmd('normal! V' .. instance.end_line .. 'Gy')
-      elseif action == 'delete' then
-        vim.cmd('normal! V' .. instance.end_line .. 'Gd')
-      elseif action == 'change' then
-        vim.cmd('normal! V' .. instance.end_line .. 'Gc')
-        vim.cmd('startinsert')
-      elseif action == 'visual' then
-        vim.cmd('normal! V' .. instance.end_line .. 'G')
-      end
     end
-  elseif textobj_key == 'm' then
-    -- Special handling for markdown code blocks
-    if textobj == 'im' then
-      -- Inside markdown code block
-      if action == 'yank' then
-        vim.cmd('normal! j0V' .. (instance.end_line - 1) .. 'Gy')
-      elseif action == 'delete' then
-        vim.cmd('normal! j0V' .. (instance.end_line - 1) .. 'Gd')
-      elseif action == 'change' then
-        vim.cmd('normal! j0V' .. (instance.end_line - 1) .. 'Gc')
-        vim.cmd('startinsert')
-      elseif action == 'visual' then
-        vim.cmd('normal! j0V' .. (instance.end_line - 1) .. 'G')
-      end
-    else -- 'am'
-      -- Around markdown code block
-      if action == 'yank' then
-        vim.cmd('normal! V' .. instance.end_line .. 'Gy')
-      elseif action == 'delete' then
-        vim.cmd('normal! V' .. instance.end_line .. 'Gd')
-      elseif action == 'change' then
-        vim.cmd('normal! V' .. instance.end_line .. 'Gc')
-        vim.cmd('startinsert')
-      elseif action == 'visual' then
-        vim.cmd('normal! V' .. instance.end_line .. 'G')
+  elseif custom_motions.is_custom(textobj_key) then
+    -- Custom motion handling (single-letter like L)
+    local custom_motion = custom_motions.get(textobj_key)
+    local bounds = custom_motions.select(textobj_key, instance, action)
+    if bounds then
+      vim.api.nvim_win_set_cursor(0, bounds.start)
+
+      -- Motions are typically characterwise
+      local visual_mode = custom_motion and custom_motion.visual_mode or 'characterwise'
+
+      if visual_mode == 'linewise' then
+        -- Use linewise visual mode (unlikely for motions, but supported)
+        if action == 'yank' then
+          vim.cmd(string.format('normal! V%dGy', bounds.end_[1]))
+        elseif action == 'delete' then
+          vim.cmd(string.format('normal! V%dGd', bounds.end_[1]))
+        elseif action == 'change' then
+          vim.cmd(string.format('normal! V%dGc', bounds.end_[1]))
+          vim.cmd('startinsert')
+        elseif action == 'visual' then
+          vim.cmd(string.format('normal! V%dG', bounds.end_[1]))
+        end
+      else
+        -- Use characterwise visual mode (default for motions)
+        if action == 'yank' then
+          vim.cmd(string.format('normal! v%dG%d|y', bounds.end_[1], bounds.end_[2] + 1))
+        elseif action == 'delete' then
+          vim.cmd(string.format('normal! v%dG%d|d', bounds.end_[1], bounds.end_[2] + 1))
+        elseif action == 'change' then
+          vim.cmd(string.format('normal! v%dG%d|c', bounds.end_[1], bounds.end_[2] + 1))
+          vim.cmd('startinsert')
+        elseif action == 'visual' then
+          vim.cmd(string.format('normal! v%dG%d|', bounds.end_[1], bounds.end_[2] + 1))
+        end
       end
     end
   else
@@ -765,8 +787,15 @@ function M.beam_scope(action, textobj)
   local saved_pos = vim.fn.getpos('.')
   local saved_win = vim.api.nvim_get_current_win() -- Save the original window
 
-  -- Extract the actual text object key (remove i/a prefix)
-  local textobj_key = textobj:sub(2)
+  -- Extract the actual text object key
+  -- For single-letter motions (like L), use as-is
+  -- For text objects with i/a prefix, remove the prefix
+  local textobj_key
+  if #textobj == 1 then
+    textobj_key = textobj -- Single-letter motion
+  else
+    textobj_key = textobj:sub(2) -- Remove i/a prefix
+  end
 
   -- Find all instances of the text object
   local instances = M.find_text_objects(textobj_key, source_buf)
@@ -1036,7 +1065,43 @@ function M.should_use_scope(textobj)
     return false
   end
 
-  -- Extract text object key (remove i/a prefix)
+  -- Check if this text object is configured for BeamScope
+  local scoped_objects = cfg.beam_scope.scoped_text_objects or {}
+  local custom_objects = cfg.beam_scope.custom_scoped_text_objects or {}
+
+  -- Handle single-letter motions (like L for URL)
+  if #textobj == 1 then
+    -- For single-letter inputs, check directly against scoped objects
+    for _, obj in ipairs(scoped_objects) do
+      if obj == textobj then
+        if vim.g.beam_debug then
+          vim.notify(
+            string.format(
+              'BeamScope: Matched motion %s with default scoped object %s',
+              textobj,
+              obj
+            ),
+            vim.log.levels.DEBUG
+          )
+        end
+        return true
+      end
+    end
+
+    for _, obj in ipairs(custom_objects) do
+      if obj == textobj then
+        if vim.g.beam_debug then
+          vim.notify(
+            string.format('BeamScope: Matched motion %s with custom scoped object %s', textobj, obj),
+            vim.log.levels.DEBUG
+          )
+        end
+        return true
+      end
+    end
+  end
+
+  -- Extract text object key (remove i/a prefix for standard text objects)
   local key = textobj:sub(2)
 
   -- Debug logging
@@ -1047,11 +1112,7 @@ function M.should_use_scope(textobj)
     )
   end
 
-  -- Check if this text object is configured for BeamScope
-  local scoped_objects = cfg.beam_scope.scoped_text_objects or {}
-  local custom_objects = cfg.beam_scope.custom_scoped_text_objects or {}
-
-  -- Check default scoped objects
+  -- Check default scoped objects for text objects with i/a prefix
   for _, obj in ipairs(scoped_objects) do
     if obj == key then
       if vim.g.beam_debug then
@@ -1064,7 +1125,7 @@ function M.should_use_scope(textobj)
     end
   end
 
-  -- Check custom scoped objects
+  -- Check custom scoped objects for text objects with i/a prefix
   for _, obj in ipairs(custom_objects) do
     if obj == key then
       if vim.g.beam_debug then

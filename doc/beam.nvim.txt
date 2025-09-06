@@ -297,6 +297,38 @@ text objects from:
 - targets.vim: Seek-able text objects with next/last variants
 - Any other plugin that defines text objects!
 
+Beam Compatibility~
+                                            *beam.nvim-compatibility*
+
+Not all text objects and motions work seamlessly with beam's BeamScope feature.
+Understanding compatibility helps you know what to expect:
+
+**Compatible Text Objects:**
+Text objects that work perfectly with BeamScope are those that:
+- Are delimiter-based (quotes, brackets, tags)
+- Can be enumerated from any cursor position
+- Use Vim's built-in text object system
+Examples: `i"`, `a(`, `i{`, `at`
+
+**Incompatible Motions:**
+Some motions are "forward-seeking" - they find the NEXT occurrence from cursor:
+- `L` (URL) from nvim-various-textobjs seeks forward to next URL
+- `Q` (quote) seeks to next quote
+- `R` (rest of paragraph) operates from cursor forward
+
+For these, beam reimplements the pattern matching to enable buffer-wide
+enumeration. We borrow the patterns from the original plugins but provide
+our own selection logic.
+
+**Custom Implementations:**
+Beam provides its own implementations for:
+- `im`/`am` - Inside/around markdown code blocks
+- `ih`/`ah` - Inside/around markdown headers  
+- `L` - URL motion (pattern from nvim-various-textobjs)
+
+These are defined in `lua/beam/custom_text_objects.lua` and
+`lua/beam/custom_motions.lua` for extensibility.
+
 Smart Highlighting~
                                             *beam.nvim-smart-highlighting*
 
