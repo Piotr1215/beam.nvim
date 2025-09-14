@@ -258,6 +258,64 @@ function M.discover_mini_ai_text_objects()
   return text_objects, true -- Return objects and true to indicate mini.ai was found
 end
 
+---Build exclusion set for text objects
+---@param excluded_list table List of excluded text object keys
+---@return table excluded Set of excluded keys
+local function build_exclusion_set(excluded_list)
+  local excluded = {}
+  for _, key in ipairs(excluded_list or {}) do
+    -- Handle both the suffix (e.g., 'q') and full forms (e.g., 'iq', 'aq')
+    excluded[key] = true
+    excluded['i' .. key] = true
+    excluded['a' .. key] = true
+  end
+  return excluded
+end
+
+---Check if text object should be included
+---@param keymap string Text object keymap
+---@param excluded table Exclusion set
+---@param seen table Already seen text objects
+---@return boolean
+local function should_include_text_object(keymap, excluded, seen)
+  if seen[keymap] then
+    return false
+  end
+
+  -- Check both the full keymap and its suffix
+  if excluded[keymap] then
+    return false
+  end
+
+  local suffix = keymap:sub(2)
+  if #keymap > 1 and excluded[suffix] then
+    return false
+  end
+
+  return true
+end
+
+---Identify source from mapping description
+---@param desc string Mapping description
+---@return string source Source identifier
+local function identify_source_from_desc(desc)
+  -- Table-driven source identification
+  local patterns = {
+    treesitter = { 'treesitter', 'TS', 'function', 'class', 'parameter', 'conditional' },
+    various = { 'various', 'indentation', 'subword', 'diagnostic', 'entire', 'value', 'key' },
+  }
+
+  for source, keywords in pairs(patterns) do
+    for _, keyword in ipairs(keywords) do
+      if desc:match(keyword) then
+        return source
+      end
+    end
+  end
+
+  return 'mapped'
+end
+
 -- Discover all available text objects
 function M.discover_text_objects()
   -- Ensure plugins are loaded first
@@ -268,13 +326,7 @@ function M.discover_text_objects()
   local config = require('beam.config')
 
   -- Build exclusion set for faster lookups
-  local excluded = {}
-  for _, key in ipairs(config.current.excluded_text_objects or {}) do
-    -- Handle both the suffix (e.g., 'q') and full forms (e.g., 'iq', 'aq')
-    excluded[key] = true
-    excluded['i' .. key] = true
-    excluded['a' .. key] = true
-  end
+  local excluded = build_exclusion_set(config.current.excluded_text_objects)
 
   -- FIRST: Try to discover mini.ai text objects (if available)
   -- These should take priority over beam's hardcoded defaults
@@ -282,9 +334,8 @@ function M.discover_text_objects()
   if has_mini_ai and next(mini_ai_objects) then
     -- mini.ai is available and has objects
     for keymap, desc in pairs(mini_ai_objects) do
-      if not excluded[keymap] and not excluded[keymap:sub(2)] and not seen[keymap] then
+      if should_include_text_object(keymap, excluded, seen) then
         -- Check if this is a built-in mini.ai object that should override beam's default
-        local suffix = keymap:sub(2)
         local is_mini_builtin = keymap:match('^[ia][bfqta]$') -- mini.ai built-ins: b, f, q, t, a
 
         table.insert(available, {
@@ -300,14 +351,9 @@ function M.discover_text_objects()
 
   -- Then, check our curated list of common text objects
   for _, text_obj in ipairs(COMMON_TEXT_OBJECTS) do
-    -- Skip if excluded or already discovered from mini.ai
-    if
-      not excluded[text_obj.keymap]
-      and not excluded[text_obj.keymap:sub(2)]
-      and not seen[text_obj.keymap]
-    then
+    if should_include_text_object(text_obj.keymap, excluded, seen) then
       local is_available, source = M.is_text_object_available(text_obj.keymap)
-      if is_available and not seen[text_obj.keymap] then
+      if is_available then
         text_obj.source = source
         table.insert(available, text_obj)
         seen[text_obj.keymap] = true
@@ -327,30 +373,8 @@ function M.discover_text_objects()
         -- Skip if suffix contains special characters that don't make sense
         if not suffix:match('[^%w%p]') and #suffix <= 2 then
           -- Try to identify the source from the description
-          local source = 'mapped'
           local desc = map.desc or (first == 'i' and 'inner ' or 'around ') .. suffix
-
-          -- Identify source based on common patterns in descriptions
-          if
-            desc:match('treesitter')
-            or desc:match('TS')
-            or desc:match('function')
-            or desc:match('class')
-            or desc:match('parameter')
-            or desc:match('conditional')
-          then
-            source = 'treesitter'
-          elseif
-            desc:match('various')
-            or desc:match('indentation')
-            or desc:match('subword')
-            or desc:match('diagnostic')
-            or desc:match('entire')
-            or desc:match('value')
-            or desc:match('key')
-          then
-            source = 'various'
-          end
+          local source = identify_source_from_desc(desc)
 
           table.insert(available, {
             keymap = lhs,
@@ -503,7 +527,8 @@ end
 -- Auto-register discovered text objects with beam
 function M.auto_register_text_objects(options)
   options = options or {}
-  local conflict_resolution = options.conflict_resolution or 'skip'
+  -- conflict_resolution is not currently used, but kept for future extensibility
+  -- local conflict_resolution = options.conflict_resolution or 'skip'
 
   local available = M.discover_text_objects()
   local beam = require('beam')
@@ -542,7 +567,7 @@ function M.auto_register_text_objects(options)
 
   for _, text_obj in ipairs(available) do
     local full_key = text_obj.keymap
-    local prefix = full_key:sub(1, 1) -- i or a
+    -- prefix would be full_key:sub(1, 1) -- i or a (not used here)
     local suffix = full_key:sub(2) -- the actual text object key
 
     -- Check if this suffix was already processed
@@ -691,7 +716,6 @@ function M.get_conflict_report()
   local available = M.discover_text_objects()
   local config = require('beam.config')
   local conflicts = {}
-  local seen = {}
 
   -- Group by suffix AND source to find real conflicts
   -- A conflict only exists when different SOURCES provide the same text object
