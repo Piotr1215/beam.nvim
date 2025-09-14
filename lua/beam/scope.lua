@@ -57,6 +57,10 @@ function M.cleanup_scope()
 end
 
 -- Find all instances of a text object in the current buffer
+---Find text objects in the source buffer
+---@param textobj_key string Text object key
+---@param source_buf number Source buffer number
+---@return table instances List of text object instances
 function M.find_text_objects(textobj_key, source_buf)
   local instances = {}
 
@@ -453,6 +457,11 @@ function M.find_text_objects(textobj_key, source_buf)
 end
 
 -- Create formatted lines for the scope buffer (returns multiple lines per instance)
+---Format instance lines for display
+---@param instance table Text object instance
+---@param index number Instance index
+---@param textobj_key string Text object key
+---@return table lines Formatted lines
 function M.format_instance_lines(instance, index, textobj_key)
   local lines = {}
 
@@ -518,6 +527,11 @@ function M.format_instance_lines(instance, index, textobj_key)
 end
 
 -- Create the BeamScope buffer
+---Create scope buffer with formatted content
+---@param instances table List of instances
+---@param textobj_key string Text object key
+---@param source_buf number Source buffer number
+---@return number buffer Buffer number
 function M.create_scope_buffer(instances, textobj_key, source_buf)
   -- Create a new buffer
   local buf = vim.api.nvim_create_buf(false, true)
@@ -574,6 +588,9 @@ function M.create_scope_buffer(instances, textobj_key, source_buf)
 end
 
 -- Update preview by showing the code block in the source buffer
+---Update preview highlighting
+---@param line_num number Current line number
+---@return nil
 function M.update_preview(line_num)
   local instance_idx = M.scope_state.line_to_instance and M.scope_state.line_to_instance[line_num]
   if not instance_idx or not M.scope_state.node_map[instance_idx] then
@@ -633,6 +650,9 @@ function M.update_preview(line_num)
 end
 
 -- Execute the operation on the selected instance
+---Execute operation on selected instance
+---@param line_num number Selected line number
+---@return nil
 function M.execute_operation(line_num)
   local instance_idx = M.scope_state.line_to_instance and M.scope_state.line_to_instance[line_num]
   if not instance_idx or not M.scope_state.node_map[instance_idx] then
@@ -782,6 +802,10 @@ function M.execute_operation(line_num)
 end
 
 -- Main entry point for BeamScope
+---Main BeamScope function
+---@param action string Action to perform
+---@param textobj string Text object to select
+---@return boolean success Whether BeamScope was activated
 function M.beam_scope(action, textobj)
   local source_buf = vim.api.nvim_get_current_buf()
   local saved_pos = vim.fn.getpos('.')
@@ -1052,6 +1076,9 @@ function M.beam_scope(action, textobj)
 end
 
 -- Check if a text object should use BeamScope
+---Check if BeamScope should be used for a text object
+---@param textobj string Text object to check
+---@return boolean should_use Whether to use BeamScope
 function M.should_use_scope(textobj)
   local cfg = config.current
 

@@ -1,7 +1,11 @@
+---@class BeamOperators
 local M = {}
 local config = require('beam.config')
 local search_transform = require('beam.search_transform')
 
+---Execute the beam search operator
+---@param type string The motion type (unused but required by operatorfunc)
+---@return nil
 M.BeamSearchOperator = function(type)
   local pattern = vim.g.beam_search_operator_pattern
   local saved_pos = vim.g.beam_search_operator_saved_pos
@@ -169,6 +173,8 @@ end
 M.BeamSearchOperatorPending = {}
 _G.BeamSearchOperatorPending = nil
 
+---Execute the search operator after search pattern is entered
+---@return nil
 M.BeamExecuteSearchOperator = function()
   local pending = _G.BeamSearchOperatorPending or M.BeamSearchOperatorPending
   if not pending or not pending.action or not pending.textobj then
@@ -485,6 +491,9 @@ local original_delete_setup = M.create_setup_function('delete', true)
 local original_change_setup = M.create_setup_function('change', false)
 local original_visual_setup = M.create_setup_function('visual', false)
 
+---Setup yank operation with search
+---@param textobj string Text object to yank (e.g., 'iw', 'ap')
+---@return string Returns '/' to trigger search mode
 M.BeamYankSearchSetup = function(textobj)
   local cfg = config.current
 
@@ -505,6 +514,9 @@ M.BeamYankSearchSetup = function(textobj)
   return original_yank_setup(textobj)
 end
 
+---Setup delete operation with search
+---@param textobj string Text object to delete
+---@return string Returns '/' to trigger search mode
 M.BeamDeleteSearchSetup = function(textobj)
   local cfg = config.current
 
@@ -525,6 +537,9 @@ M.BeamDeleteSearchSetup = function(textobj)
   return original_delete_setup(textobj)
 end
 
+---Setup change operation with search
+---@param textobj string Text object to change
+---@return string Returns '/' to trigger search mode
 M.BeamChangeSearchSetup = function(textobj)
   local cfg = config.current
 
@@ -545,6 +560,9 @@ M.BeamChangeSearchSetup = function(textobj)
   return original_change_setup(textobj)
 end
 
+---Setup visual selection with search
+---@param textobj string Text object to select
+---@return string Returns '/' to trigger search mode
 M.BeamVisualSearchSetup = function(textobj)
   local cfg = config.current
 
@@ -566,6 +584,8 @@ M.BeamVisualSearchSetup = function(textobj)
 end
 
 -- Line operator setup functions with Telescope support
+---Setup yank line operation with search
+---@return string|nil Returns '/' to trigger search or nil for cross-buffer
 M.BeamYankLineSearchSetup = function()
   local cfg = config.current
   if should_use_telescope_immediately(cfg) then
@@ -579,6 +599,8 @@ M.BeamYankLineSearchSetup = function()
   return M.create_setup_function('yankline', true)('')
 end
 
+---Setup delete line operation with search
+---@return string|nil Returns '/' to trigger search or nil for cross-buffer
 M.BeamDeleteLineSearchSetup = function()
   local cfg = config.current
   if should_use_telescope_immediately(cfg) then
@@ -591,6 +613,8 @@ M.BeamDeleteLineSearchSetup = function()
   return M.create_setup_function('deleteline', true)('')
 end
 
+---Setup change line operation with search
+---@return string|nil Returns '/' to trigger search or nil for cross-buffer
 M.BeamChangeLineSearchSetup = function()
   local cfg = config.current
   if should_use_telescope_immediately(cfg) then
@@ -603,6 +627,8 @@ M.BeamChangeLineSearchSetup = function()
   return M.create_setup_function('changeline', false)('')
 end
 
+---Setup visual line selection with search
+---@return string|nil Returns '/' to trigger search or nil for cross-buffer
 M.BeamVisualLineSearchSetup = function()
   local cfg = config.current
   if should_use_telescope_immediately(cfg) then

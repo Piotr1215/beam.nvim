@@ -1,7 +1,40 @@
 local M = {}
 
--- Default configuration for beam.nvim
--- This is the source of truth for all available options
+---@class BeamCrossBufferConfig
+---@field enabled boolean Whether cross-buffer operations are enabled
+---@field fuzzy_finder 'telescope'|'fzf-lua'|'mini.pick' Fuzzy finder to use
+---@field include_hidden boolean Include hidden buffers in search
+
+---@class BeamScopeConfig
+---@field enabled boolean Enable BeamScope for scoped text objects
+---@field scoped_text_objects string[] List of text objects to enable BeamScope for
+---@field custom_scoped_text_objects string[] Additional custom text objects for BeamScope
+---@field preview_context number Number of context lines to show before/after in preview
+---@field window_width number Maximum width of the BeamScope window
+
+---@class BeamExperimentalConfig
+---@field dot_repeat boolean Enable dot repeat support (experimental)
+---@field count_support boolean Enable count support (experimental)
+---@field telescope_single_buffer table Optional Telescope configuration for single buffer
+
+---@class BeamConfig
+---@field prefix string Prefix for all mappings
+---@field visual_feedback_duration number Duration of visual feedback in milliseconds
+---@field clear_highlight boolean Clear search highlight after operation
+---@field clear_highlight_delay number Delay before clearing highlight in milliseconds
+---@field cross_buffer BeamCrossBufferConfig Cross-buffer operation settings
+---@field enable_default_text_objects boolean Enable beam's custom text objects
+---@field custom_text_objects table<string, string|table> Custom text objects to register
+---@field auto_discover_custom_text_objects boolean Auto-discover text objects from plugins
+---@field show_discovery_notification boolean Show notification about discovered text objects
+---@field excluded_text_objects string[] Text object keys to exclude from discovery
+---@field excluded_motions string[] Motion keys to exclude from discovery
+---@field resolved_conflicts string[] Text object keys where conflicts are intentional
+---@field smart_highlighting boolean Enable real-time highlighting for delimiter-based text objects
+---@field beam_scope BeamScopeConfig BeamScope configuration
+---@field experimental BeamExperimentalConfig Experimental features
+
+---@type BeamConfig
 M.defaults = {
   prefix = ',',
   visual_feedback_duration = 150,
@@ -62,18 +95,26 @@ M.defaults = {
   },
 }
 
+---@type table<string, string>
 M.motions = {} -- Will be populated by discovery
 
+---@type table<string, string|table>
 -- Registry of ALL active text objects (config + discovered)
 -- This is what actually gets used for mappings
 M.active_text_objects = {}
 
+---@type table<string, string>
 -- Only keep beam-specific text objects
 -- Everything else will be auto-discovered from Vim built-ins or other plugins
 M.text_objects = {
   ['m'] = 'markdown code block', -- The only truly beam-specific text object (im/am)
 }
 
+---@class BeamOperator
+---@field func string Function name suffix (e.g., 'YankSearchSetup')
+---@field verb string Verb describing the operation (e.g., 'yank')
+
+---@type table<string, BeamOperator>
 M.operators = {
   y = { func = 'YankSearchSetup', verb = 'yank' },
   d = { func = 'DeleteSearchSetup', verb = 'delete' },
@@ -81,6 +122,12 @@ M.operators = {
   v = { func = 'VisualSearchSetup', verb = 'select' },
 }
 
+---@class BeamLineOperator
+---@field action string Action identifier
+---@field verb string Verb describing the operation
+---@field save_pos boolean Whether to save cursor position
+
+---@type table<string, BeamLineOperator>
 M.line_operators = {
   Y = { action = 'yankline', verb = 'yank entire line', save_pos = true },
   D = { action = 'deleteline', verb = 'delete entire line', save_pos = true },
@@ -88,8 +135,11 @@ M.line_operators = {
   V = { action = 'visualline', verb = 'select entire line', save_pos = false },
 }
 
+---@type BeamConfig
 M.current = {}
 
+---@param opts? BeamConfig|table User configuration options
+---@return BeamConfig
 function M.setup(opts)
   M.current = vim.tbl_deep_extend('force', M.defaults, opts or {})
 
@@ -128,11 +178,14 @@ function M.setup(opts)
   return M.current
 end
 
+---@param key string Text object key (single character or multi-character)
+---@param description string|table Description or text object definition
 function M.register_text_object(key, description)
   -- Add to active registry, NOT to config
   M.active_text_objects[key] = description
 end
 
+---@param objects table<string, string|table> Text objects to register
 function M.register_text_objects(objects)
   -- Add to active registry, NOT to config
   M.active_text_objects = vim.tbl_extend('force', M.active_text_objects, objects)

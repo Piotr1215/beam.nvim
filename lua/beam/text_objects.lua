@@ -1,7 +1,18 @@
+---@class BeamTextObjects
+---@field custom_objects table<string, BeamCustomTextObject> Registry of custom text objects
 local M = {}
 
+---@class BeamCustomTextObject
+---@field desc string Description of the text object
+---@field select fun(inclusive: boolean) Function to select the text object
+
+---@type table<string, BeamCustomTextObject>
 M.custom_objects = {}
 
+---Register a custom text object
+---@param key string Single character key for the text object
+---@param opts string|BeamCustomTextObject Text object definition or description
+---@return nil
 function M.register_custom_text_object(key, opts)
   if type(opts) == 'string' then
     return
@@ -34,6 +45,9 @@ function M.register_custom_text_object(key, opts)
   end, { desc = opts.desc or ('around ' .. key) })
 end
 
+---Select markdown code block text object
+---@param inclusive boolean Whether to include the delimiters (```)
+---@return nil
 function M.select_markdown_codeblock(inclusive)
   vim.cmd("call search('```', 'cb')")
 
@@ -50,6 +64,8 @@ function M.select_markdown_codeblock(inclusive)
   end
 end
 
+---Setup default beam text objects
+---@return nil
 function M.setup_defaults()
   M.register_custom_text_object('m', {
     desc = 'markdown code block',

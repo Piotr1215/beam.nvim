@@ -1,3 +1,10 @@
+---@class BeamModule
+---@field registered_text_objects table<string, boolean> Track registered text objects
+---@field setup fun(opts?: BeamConfig|table) Setup function
+---@field is_text_object_registered fun(key: string): boolean Check if text object is registered
+---@field register_text_object fun(key: string, description: string|table): boolean Register a text object
+---@field register_text_objects fun(objects: table<string, string|table>) Register multiple text objects
+---@field get_config fun(): BeamConfig Get current configuration
 local M = {}
 
 local config = require('beam.config')
@@ -5,13 +12,12 @@ local operators = require('beam.operators')
 local mappings = require('beam.mappings')
 local text_objects = require('beam.text_objects')
 
+---@type table<string, boolean>
 -- Track registered text objects to avoid duplicates
 M.registered_text_objects = {}
 
-function M.setup(opts)
-  config.setup(opts)
-
-  -- Warn about incompatible configuration
+---Check and warn about incompatible configuration options
+local function check_config_compatibility()
   if
     config.current.beam_scope
     and config.current.beam_scope.enabled
@@ -24,60 +30,101 @@ function M.setup(opts)
       { title = 'Beam.nvim' }
     )
   end
+end
+
+---Register custom text objects from configuration
+---@param opts? table User configuration options
+local function register_custom_text_objects(opts)
+  if not opts or not opts.custom_text_objects then
+    return
+  end
+
+  for key, obj in pairs(opts.custom_text_objects) do
+    if type(obj) == 'table' and obj.select then
+      text_objects.register_custom_text_object(key, obj)
+    end
+  end
+end
+
+---Handle text object discovery notifications
+---@param result table Discovery result
+---@param unresolved_count number Number of unresolved conflicts
+---@param resolved_count number Number of resolved conflicts
+local function handle_discovery_notifications(result, unresolved_count, resolved_count)
+  if unresolved_count > 0 then
+    local msg = string.format(
+      'Beam.nvim: Found %d unresolved text object conflicts. Run :checkhealth beam for details.',
+      unresolved_count
+    )
+    vim.notify(msg, vim.log.levels.WARN, { title = 'Beam.nvim' })
+  elseif config.current.show_discovery_notification and result then
+    local msg = string.format(
+      '[beam.nvim] Discovered %d custom text objects, %d motions (%d total available)',
+      result.registered or 0,
+      result.motions_registered or 0,
+      (result.total or 0) + (result.motions_total or 0)
+    )
+    if resolved_count > 0 then
+      msg = msg .. string.format(' (%d conflicts marked as resolved)', resolved_count)
+    end
+    vim.notify(msg, vim.log.levels.INFO)
+  end
+end
+
+---Setup WhichKey integration if available
+local function setup_which_key()
+  local has_which_key, which_key = pcall(require, 'which-key')
+  if not has_which_key then
+    return
+  end
+
+  local prefix = config.current.prefix or ','
+  which_key.add({
+    { prefix, group = 'Remote Operators' },
+    { prefix .. 'y', group = 'Yank' },
+    { prefix .. 'd', group = 'Delete' },
+    { prefix .. 'c', group = 'Change' },
+    { prefix .. 'v', group = 'Visual' },
+  })
+end
+
+---Perform auto-discovery of text objects from other plugins
+local function auto_discover_text_objects()
+  if not config.current.auto_discover_custom_text_objects then
+    return
+  end
+
+  local discovery = require('beam.text_object_discovery')
+
+  -- Delay discovery slightly to allow plugins to load
+  vim.defer_fn(function()
+    local result = discovery.auto_register_text_objects({
+      conflict_resolution = config.current.discovery_conflict_resolution or 'skip',
+      show_conflicts = false,
+    })
+
+    local unresolved_count, resolved_count = discovery.check_unresolved_conflicts()
+    handle_discovery_notifications(result, unresolved_count, resolved_count)
+  end, 500)
+end
+
+---@param opts? BeamConfig|table User configuration options
+function M.setup(opts)
+  config.setup(opts)
+  check_config_compatibility()
 
   if opts and opts.enable_default_text_objects ~= false then
     text_objects.setup_defaults()
   end
 
-  if opts and opts.custom_text_objects then
-    for key, obj in pairs(opts.custom_text_objects) do
-      if type(obj) == 'table' and obj.select then
-        text_objects.register_custom_text_object(key, obj)
-      end
-    end
-  end
-
+  register_custom_text_objects(opts)
   mappings.setup()
 
   -- Always register Vim's built-in text objects
   local discovery = require('beam.text_object_discovery')
   discovery.register_builtin_text_objects()
 
-  -- Auto-discover custom text objects from plugins if enabled
-  if config.current.auto_discover_custom_text_objects then
-    -- Delay discovery slightly to allow plugins to load
-    vim.defer_fn(function()
-      local result = discovery.auto_register_text_objects({
-        conflict_resolution = config.current.discovery_conflict_resolution or 'skip',
-        show_conflicts = false, -- Don't show conflicts during registration
-      })
-
-      -- Check for unresolved conflicts after registration
-      local unresolved_count, resolved_count = discovery.check_unresolved_conflicts()
-
-      -- Show appropriate notification based on what happened
-      if unresolved_count > 0 then
-        -- Only show warning if there are actual unresolved conflicts
-        local msg = string.format(
-          'Beam.nvim: Found %d unresolved text object conflicts. Run :checkhealth beam for details.',
-          unresolved_count
-        )
-        vim.notify(msg, vim.log.levels.WARN, { title = 'Beam.nvim' })
-      elseif config.current.show_discovery_notification and result then
-        -- Show success message only if requested and no issues
-        local msg = string.format(
-          '[beam.nvim] Discovered %d custom text objects, %d motions (%d total available)',
-          result.registered or 0,
-          result.motions_registered or 0,
-          (result.total or 0) + (result.motions_total or 0)
-        )
-        if resolved_count > 0 then
-          msg = msg .. string.format(' (%d conflicts marked as resolved)', resolved_count)
-        end
-        vim.notify(msg, vim.log.levels.INFO)
-      end
-    end, 500) -- Wait for lazy-loaded plugins
-  end
+  auto_discover_text_objects()
 
   -- Expose core functions globally for health check and operator functionality
   _G.BeamSearchOperator = operators.BeamSearchOperator
@@ -86,24 +133,19 @@ function M.setup(opts)
   -- Mark plugin as loaded
   vim.g.loaded_beam = true
 
-  local has_which_key, which_key = pcall(require, 'which-key')
-  if has_which_key then
-    local prefix = config.current.prefix or ','
-    which_key.add({
-      { prefix, group = 'Remote Operators' },
-      { prefix .. 'y', group = 'Yank' },
-      { prefix .. 'd', group = 'Delete' },
-      { prefix .. 'c', group = 'Change' },
-      { prefix .. 'v', group = 'Visual' },
-    })
-  end
+  setup_which_key()
 end
 
+---@param key string Text object key to check
+---@return boolean
 function M.is_text_object_registered(key)
   -- Check active text objects (includes both config and discovered)
   return config.active_text_objects[key] ~= nil
 end
 
+---@param key string Text object key
+---@param description string|table Text object description or definition
+---@return boolean success Whether registration was successful
 function M.register_text_object(key, description)
   -- Avoid duplicate registrations
   if M.is_text_object_registered(key) then
@@ -123,12 +165,14 @@ function M.register_text_object(key, description)
   return true
 end
 
+---@param objects table<string, string|table> Text objects to register
 function M.register_text_objects(objects)
   for key, obj in pairs(objects) do
     M.register_text_object(key, obj)
   end
 end
 
+---@return BeamConfig Current configuration
 function M.get_config()
   return config.current
 end
