@@ -1,6 +1,7 @@
 # Test artifacts
 .tests/
 test/xdg/
+beam.nvim
 
 # Logs
 *.log
