@@ -243,208 +243,118 @@ local function switch_to_source_buffer(source_buf)
   return original_win, original_buf, need_restore
 end
 
+-- Helper: Find custom motion instances
+---@param textobj_key string Text object key
+---@param source_buf number Source buffer number
+---@return table instances List of instances
+local function find_custom_motion_instances(textobj_key, source_buf)
+  if not custom_motions.is_custom(textobj_key) then
+    return {}
+  end
+  return custom_motions.find_all(textobj_key, source_buf)
+end
+
+-- Helper: Find custom text object instances
+---@param textobj_key string Text object key
+---@param source_buf number Source buffer number
+---@return table instances List of instances
+local function find_custom_textobj_instances(textobj_key, source_buf)
+  if not custom_text_objects.is_custom(textobj_key) then
+    return {}
+  end
+  return custom_text_objects.find_all(textobj_key, source_buf)
+end
+
+-- Helper: Find delimited text objects (main logic)
+---@param textobj_key string Text object key
+---@param source_buf number Source buffer number
+---@return table instances List of instances
+local function find_delimited_instances(textobj_key, source_buf)
+  local instances = {}
+
+  -- Check if buffer is empty first
+  local lines = vim.api.nvim_buf_get_lines(source_buf, 0, -1, false)
+  if #lines == 0 or (#lines == 1 and lines[1] == '') then
+    return instances
+  end
+
+  local saved_view = vim.fn.winsaveview()
+
+  -- Map of closing delimiters to their opening counterparts
+  local delimiter_pairs = {
+    [')'] = '(',
+    [']'] = '[',
+    ['}'] = '{',
+    ['>'] = '<',
+  }
+
+  -- Use opening delimiter for searching
+  local search_key = delimiter_pairs[textobj_key] or textobj_key
+
+  -- Get search pattern for the delimiter
+  local search_pattern
+  search_pattern, search_key = get_delimiter_search_pattern(search_key)
+
+  -- Find all occurrences of the delimiter
+  vim.fn.cursor(1, 1)
+  local saved_reg = vim.fn.getreg('a')
+  local saved_reg_type = vim.fn.getregtype('a')
+
+  -- Add safety counter to prevent infinite loops
+  local max_iterations = 1000
+  local iteration = 0
+  local last_pos = { 0, 0 }
+
+  while iteration < max_iterations do
+    iteration = iteration + 1
+    local pos = vim.fn.searchpos(search_pattern, 'W')
+    if pos[1] == 0 then
+      break
+    end
+
+    -- Check if we're stuck at the same position
+    if pos[1] == last_pos[1] and pos[2] == last_pos[2] then
+      -- Move cursor forward to avoid infinite loop
+      vim.fn.cursor(pos[1], pos[2] + 1)
+    elseif should_process_bracket(search_key, pos) then
+      -- Try to select the text object at this position
+      vim.api.nvim_win_set_cursor(0, pos)
+      local instance = try_select_text_object(textobj_key, search_key)
+      if instance and not is_duplicate_instance(instances, instance) then
+        table.insert(instances, instance)
+      end
+    end
+    last_pos = pos
+  end
+
+  -- Restore register and view
+  vim.fn.setreg('a', saved_reg, saved_reg_type)
+  vim.fn.winrestview(saved_view)
+
+  return instances
+end
+
 ---Find text objects in the source buffer
 ---@param textobj_key string Text object key
 ---@param source_buf number Source buffer number
 ---@return table instances List of text object instances
 function M.find_text_objects(textobj_key, source_buf)
-  local instances = {}
-
   -- Save current window and buffer
-  local original_win, original_buf, need_restore = switch_to_source_buffer(source_buf)
+  local original_win, original_buf = switch_to_source_buffer(source_buf)
 
-  -- Check if it's a custom motion
-  if custom_motions.is_custom(textobj_key) then
-    instances = custom_motions.find_all(textobj_key, source_buf)
-    if need_restore then
-      vim.api.nvim_set_current_win(original_win)
-    end
-    return instances
+  -- Try different finders in order
+  local instances = find_custom_motion_instances(textobj_key, source_buf)
 
-  -- Check if it's a custom text object
-  elseif custom_text_objects.is_custom(textobj_key) then
-    instances = custom_text_objects.find_all(textobj_key, source_buf)
-    if need_restore then
-      vim.api.nvim_set_current_win(original_win)
-    end
-    return instances
+  if #instances == 0 then
+    instances = find_custom_textobj_instances(textobj_key, source_buf)
+  end
 
-  -- Handle markdown code blocks specially
-  elseif textobj_key == 'm' then
+  if #instances == 0 and textobj_key == 'm' then
     instances = find_markdown_code_blocks(source_buf)
-    if need_restore then
-      vim.api.nvim_set_current_win(original_win)
-    end
-    return instances
-  else
-    -- For delimited text objects (quotes, brackets, etc.)
-    -- Check if buffer is empty first
-    local lines = vim.api.nvim_buf_get_lines(source_buf, 0, -1, false)
-    if #lines == 0 or (#lines == 1 and lines[1] == '') then
-      -- Empty buffer, no text objects to find
-      -- Restore original window/buffer before returning
-      if vim.api.nvim_win_is_valid(original_win) then
-        vim.api.nvim_set_current_win(original_win)
-      end
-      if
-        vim.api.nvim_buf_is_valid(original_buf) and vim.api.nvim_get_current_buf() ~= original_buf
-      then
-        vim.api.nvim_set_current_buf(original_buf)
-      end
-      return instances
-    end
+  end
 
-    local saved_view = vim.fn.winsaveview()
-
-    -- Map of closing delimiters to their opening counterparts
-    local delimiter_pairs = {
-      [')'] = '(',
-      [']'] = '[',
-      ['}'] = '{',
-      ['>'] = '<',
-    }
-
-    -- Use opening delimiter for searching
-    local search_key = delimiter_pairs[textobj_key] or textobj_key
-
-    -- Get search pattern for the delimiter
-    local search_pattern
-    search_pattern, search_key = get_delimiter_search_pattern(search_key)
-
-    -- Find all occurrences of the delimiter
-    vim.fn.cursor(1, 1)
-    local saved_reg = vim.fn.getreg('a')
-    local saved_reg_type = vim.fn.getregtype('a')
-
-    -- Add safety counter to prevent infinite loops
-    local max_iterations = 1000
-    local iteration = 0
-    local last_pos = { 0, 0 }
-
-    while iteration < max_iterations do
-      iteration = iteration + 1
-      local pos = vim.fn.searchpos(search_pattern, 'W')
-      if pos[1] == 0 then
-        break
-      end
-
-      local should_process = true
-
-      -- Check if we're stuck at the same position
-      if pos[1] == last_pos[1] and pos[2] == last_pos[2] then
-        -- Move cursor forward to avoid infinite loop
-        vim.fn.cursor(pos[1], pos[2] + 1)
-        should_process = false
-      end
-      last_pos = pos
-
-      -- For brackets, check if we're on an opening bracket
-      if should_process and not should_process_bracket(search_key, pos) then
-        should_process = false
-      end
-
-      if should_process then
-        -- Try to select the text object at this position
-        vim.api.nvim_win_set_cursor(0, pos)
-
-        local instance = try_select_text_object(textobj_key, search_key)
-        if instance and not is_duplicate_instance(instances, instance) then
-          table.insert(instances, instance)
-        end
-      end
-    end
-
-    -- Restore register and view
-    vim.fn.setreg('a', saved_reg, saved_reg_type)
-    vim.fn.winrestview(saved_view)
-
-    -- Try Tree-sitter as a fallback for more complex text objects
-    local has_ts, _ = pcall(require, 'nvim-treesitter.textobjects.select')
-    if has_ts and #instances == 0 then
-      -- Try to find Tree-sitter nodes for this text object
-      local parser = vim.treesitter.get_parser(source_buf)
-      if parser then
-        local tree = parser:parse()[1]
-        local root = tree:root()
-
-        -- Map common text objects to Tree-sitter queries
-        local query_map = {
-          f = '@function.outer',
-          F = '@function.inner',
-          c = '@class.outer',
-          C = '@class.inner',
-          a = '@parameter.outer',
-          A = '@parameter.inner',
-        }
-
-        local query_string = query_map[textobj_key]
-        if query_string then
-          -- Use Tree-sitter to find matches
-          -- This is simplified - real implementation would need proper query handling
-          local lang = parser:lang()
-          local ok, query =
-            pcall(vim.treesitter.query.parse, lang, '(' .. query_string .. ') @capture')
-          if ok then
-            for id, node in query:iter_captures(root, source_buf) do
-              local start_row, start_col, end_row, end_col = node:range()
-              local text = vim.treesitter.get_node_text(node, source_buf)
-              local preview = text:match('^[^\n]*') or ''
-
-              table.insert(instances, {
-                start_line = start_row + 1,
-                end_line = end_row + 1,
-                start_col = start_col,
-                end_col = end_col,
-                node = node,
-                preview = preview,
-                first_line = preview,
-                line_count = end_row - start_row + 1,
-              })
-            end
-          end
-        end
-      end
-    end
-
-    -- Fallback: Try to execute the text object and capture positions
-    -- This is a simplified approach - real implementation would be more robust
-    if #instances == 0 then
-      local saved_view = vim.fn.winsaveview()
-      local lines = vim.api.nvim_buf_line_count(source_buf)
-
-      for line = 1, lines do
-        vim.api.nvim_win_set_cursor(0, { line, 0 })
-
-        -- Try to select the text object
-        local _ = pcall(function()
-          vim.cmd('normal! v' .. 'i' .. textobj_key)
-          local start_pos = vim.fn.getpos("'<")
-          local end_pos = vim.fn.getpos("'>")
-
-          if start_pos[2] > 0 and end_pos[2] > 0 then
-            local text = vim.fn.getline(start_pos[2], end_pos[2])
-            local preview = type(text) == 'table' and text[1] or text
-            if #preview > 100 then
-              preview = preview:sub(1, 100) .. '...'
-            end
-
-            table.insert(instances, {
-              start_line = start_pos[2],
-              end_line = end_pos[2],
-              start_col = start_pos[3] - 1,
-              end_col = end_pos[3] - 1,
-              preview = preview,
-              first_line = preview,
-              line_count = end_pos[2] - start_pos[2] + 1,
-            })
-          end
-
-          vim.cmd('normal! \\<Esc>')
-        end)
-      end
-
-      vim.fn.winrestview(saved_view)
-    end
+  if #instances == 0 then
+    instances = find_delimited_instances(textobj_key, source_buf)
   end
 
   -- Restore original window/buffer
@@ -464,70 +374,81 @@ end
 ---@param index number Instance index
 ---@param textobj_key string Text object key
 ---@return table lines Formatted lines
-function M.format_instance_lines(instance, index, textobj_key)
-  local lines = {}
+-- Delimiter mapping for text objects
+local DELIMITER_MAP = {
+  ['"'] = { '"', '"' },
+  ["'"] = { "'", "'" },
+  ['`'] = { '`', '`' },
+  ['('] = { '(', ')' },
+  [')'] = { '(', ')' },
+  ['b'] = { '(', ')' },
+  ['['] = { '[', ']' },
+  [']'] = { '[', ']' },
+  ['{'] = { '{', '}' },
+  ['}'] = { '{', '}' },
+  ['B'] = { '{', '}' },
+  ['<'] = { '<', '>' },
+  ['>'] = { '<', '>' },
+}
 
-  -- Check if it's a custom text object with a format function
+---Format single line preview with delimiters
+---@param preview string Preview text
+---@param left_delim string Left delimiter
+---@param right_delim string Right delimiter
+---@return table lines Formatted lines
+local function format_single_line(preview, left_delim, right_delim)
+  if left_delim ~= '' then
+    return { left_delim .. preview .. right_delim }
+  end
+  return { preview }
+end
+
+---Format multiline preview with delimiters
+---@param preview string Preview text with newlines
+---@param left_delim string Left delimiter
+---@param right_delim string Right delimiter
+---@return table lines Formatted lines
+local function format_multiline(preview, left_delim, right_delim)
+  local lines = {}
+  for line in preview:gmatch('[^\n]+') do
+    table.insert(lines, line)
+  end
+
+  -- Add delimiters to first and last lines only
+  if #lines > 0 and left_delim ~= '' then
+    lines[1] = left_delim .. lines[1]
+    lines[#lines] = lines[#lines] .. right_delim
+  end
+
+  return lines
+end
+
+---@param instance table Instance to format
+---@param index number|nil Index (unused but kept for compatibility)
+---@param textobj_key string Text object key
+function M.format_instance_lines(instance, index, textobj_key)
+  -- Try custom format functions first
   local custom_obj = custom_text_objects.get(textobj_key)
   if custom_obj and custom_obj.format then
     return custom_obj.format(instance)
   end
 
-  -- Check if it's a custom motion with a format function
   local custom_motion = custom_motions.get(textobj_key)
   if custom_motion and custom_motion.format then
     return custom_motion.format(instance)
   end
 
-  -- For built-in text objects, show the complete content with delimiters
+  -- Get preview text and delimiters
   local preview = instance.first_line or instance.preview or ''
-
-  -- Determine delimiters based on text object type
-  local delimiter_map = {
-    ['"'] = { '"', '"' },
-    ["'"] = { "'", "'" },
-    ['`'] = { '`', '`' },
-    ['('] = { '(', ')' },
-    [')'] = { '(', ')' },
-    ['b'] = { '(', ')' },
-    ['['] = { '[', ']' },
-    [']'] = { '[', ']' },
-    ['{'] = { '{', '}' },
-    ['}'] = { '{', '}' },
-    ['B'] = { '{', '}' },
-    ['<'] = { '<', '>' },
-    ['>'] = { '<', '>' },
-  }
-
-  local delims = delimiter_map[textobj_key] or { '', '' }
+  local delims = DELIMITER_MAP[textobj_key] or { '', '' }
   local left_delim, right_delim = delims[1], delims[2]
 
-  -- Handle multiline content properly
+  -- Format based on whether content is multiline
   if preview:find('\n') then
-    local preview_lines = {}
-    for line in preview:gmatch('[^\n]+') do
-      table.insert(preview_lines, line)
-    end
-
-    -- Add delimiters to first and last lines only
-    if #preview_lines > 0 and left_delim ~= '' then
-      preview_lines[1] = left_delim .. preview_lines[1]
-      preview_lines[#preview_lines] = preview_lines[#preview_lines] .. right_delim
-    end
-
-    for _, line in ipairs(preview_lines) do
-      table.insert(lines, line)
-    end
+    return format_multiline(preview, left_delim, right_delim)
   else
-    -- Single line - add delimiters if applicable
-    if left_delim ~= '' then
-      table.insert(lines, left_delim .. preview .. right_delim)
-    else
-      table.insert(lines, preview)
-    end
+    return format_single_line(preview, left_delim, right_delim)
   end
-
-  return lines
 end
 
 -- Create the BeamScope buffer
@@ -595,6 +516,68 @@ end
 ---Update preview highlighting
 ---@param line_num number Current line number
 ---@return nil
+---Find window containing buffer
+---@param buf number Buffer handle
+---@return number|nil win Window handle or nil
+local function find_window_for_buffer(buf)
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(win) == buf then
+      return win
+    end
+  end
+  return nil
+end
+
+---Create source window for preview
+---@param source_buf number Source buffer handle
+---@return number win Window handle
+local function create_source_window(source_buf)
+  local current_win = vim.api.nvim_get_current_win()
+  vim.cmd('rightbelow vsplit')
+  local source_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(source_win, source_buf)
+  vim.api.nvim_set_current_win(current_win)
+  return source_win
+end
+
+---Get or create source window
+---@param source_buf number Source buffer handle
+---@return number win Window handle
+local function ensure_source_window(source_buf)
+  local source_win = M.scope_state.source_window
+
+  if source_win and vim.api.nvim_win_is_valid(source_win) then
+    return source_win
+  end
+
+  -- Try to find existing window
+  source_win = find_window_for_buffer(source_buf)
+  if not source_win then
+    source_win = create_source_window(source_buf)
+  end
+
+  M.scope_state.source_window = source_win
+  return source_win
+end
+
+---Apply highlights to instance
+---@param source_buf number Buffer handle
+---@param instance table Instance to highlight
+local function apply_instance_highlights(source_buf, instance)
+  -- Ensure namespace exists
+  if not M.scope_state.highlight_ns then
+    M.scope_state.highlight_ns = vim.api.nvim_create_namespace('BeamScopeHighlight')
+  end
+
+  -- Clear previous highlights
+  vim.api.nvim_buf_clear_namespace(source_buf, M.scope_state.highlight_ns, 0, -1)
+
+  -- Apply new highlights
+  for line = instance.start_line - 1, instance.end_line - 1 do
+    vim.api.nvim_buf_add_highlight(source_buf, M.scope_state.highlight_ns, 'Visual', line, 0, -1)
+  end
+end
+
 function M.update_preview(line_num)
   local instance_idx = M.scope_state.line_to_instance and M.scope_state.line_to_instance[line_num]
   if not instance_idx or not M.scope_state.node_map[instance_idx] then
@@ -604,53 +587,17 @@ function M.update_preview(line_num)
   local instance = M.scope_state.node_map[instance_idx]
   local source_buf = M.scope_state.source_buffer
 
-  -- Find or create source window
-  local source_win = M.scope_state.source_window
-  if not source_win or not vim.api.nvim_win_is_valid(source_win) then
-    -- Find existing window with source buffer
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-      if vim.api.nvim_win_get_buf(win) == source_buf then
-        source_win = win
-        break
-      end
-    end
+  -- Get or create source window
+  local source_win = ensure_source_window(source_buf)
 
-    -- If no window found, create one
-    if not source_win then
-      -- Save current window
-      local current_win = vim.api.nvim_get_current_win()
-
-      -- Create a split for the source buffer
-      vim.cmd('rightbelow vsplit')
-      source_win = vim.api.nvim_get_current_win()
-      vim.api.nvim_win_set_buf(source_win, source_buf)
-
-      -- Go back to BeamScope window
-      vim.api.nvim_set_current_win(current_win)
-    end
-
-    M.scope_state.source_window = source_win
-  end
-
-  -- Jump to the code block in the source window
+  -- Jump to instance and center view
   vim.api.nvim_win_set_cursor(source_win, { instance.start_line, instance.start_col })
-
-  -- Clear previous highlights
-  if M.scope_state.highlight_ns then
-    vim.api.nvim_buf_clear_namespace(source_buf, M.scope_state.highlight_ns, 0, -1)
-  else
-    M.scope_state.highlight_ns = vim.api.nvim_create_namespace('BeamScopeHighlight')
-  end
-
-  -- Highlight the code block lines
-  for line = instance.start_line - 1, instance.end_line - 1 do
-    vim.api.nvim_buf_add_highlight(source_buf, M.scope_state.highlight_ns, 'Visual', line, 0, -1)
-  end
-
-  -- Center the view on the code block in source window
   vim.api.nvim_win_call(source_win, function()
     vim.cmd('normal! zz')
   end)
+
+  -- Apply highlights
+  apply_instance_highlights(source_buf, instance)
 end
 
 -- Execute the operation on the selected instance
@@ -717,6 +664,64 @@ local function execute_standard_operation(textobj, action)
   end
 end
 
+---Execute custom text object operation
+---@param textobj_key string Text object key
+---@param instance table Text object instance
+---@param action string Action to perform
+---@param variant string|nil 'i' or 'a' variant
+local function execute_custom_textobj(textobj_key, instance, action, variant)
+  local custom_obj = custom_text_objects.get(textobj_key)
+  local bounds = custom_text_objects.select(textobj_key, instance, action, variant)
+  if not bounds then
+    return
+  end
+
+  vim.api.nvim_win_set_cursor(0, bounds.start)
+  local visual_mode = custom_obj and custom_obj.visual_mode or 'characterwise'
+  ---@diagnostic disable-next-line: param-type-mismatch
+  execute_visual_operation(bounds, action, visual_mode)
+end
+
+---Execute custom motion operation
+---@param textobj_key string Motion key
+---@param instance table Motion instance
+---@param action string Action to perform
+local function execute_custom_motion(textobj_key, instance, action)
+  local custom_motion = custom_motions.get(textobj_key)
+  local bounds = custom_motions.select(textobj_key, instance, action)
+  if not bounds then
+    return
+  end
+
+  vim.api.nvim_win_set_cursor(0, bounds.start)
+  local visual_mode = custom_motion and custom_motion.visual_mode or 'characterwise'
+  bounds.is_motion = true -- Mark as motion for proper column handling
+  ---@diagnostic disable-next-line: param-type-mismatch
+  execute_visual_operation(bounds, action, visual_mode)
+end
+
+-- Helper: Execute text object operation based on type
+---@param textobj string Full text object string
+---@param instance table Text object instance
+---@param action string Action to perform
+local function execute_textobj_operation(textobj, instance, action)
+  ---@diagnostic disable-next-line: need-check-nil
+  local textobj_key = #textobj == 1 and textobj or textobj:sub(2)
+  ---@diagnostic disable-next-line: need-check-nil
+  local variant = #textobj > 1 and textobj:sub(1, 1) or nil -- 'i' or 'a' for text objects
+
+  -- Check for custom implementations
+  if custom_text_objects.is_custom(textobj_key) then
+    execute_custom_textobj(textobj_key, instance, action, variant)
+  elseif custom_motions.is_custom(textobj_key) then
+    execute_custom_motion(textobj_key, instance, action)
+  else
+    -- For other text objects, use the standard vim commands
+    ---@diagnostic disable-next-line: param-type-mismatch
+    execute_standard_operation(textobj, action)
+  end
+end
+
 ---Restore original window and position
 ---@param saved_win number|nil Saved window handle
 ---@param saved_buf number Saved buffer number
@@ -740,87 +745,252 @@ end
 ---Execute operation on selected instance
 ---@param line_num number Selected line number
 ---@return nil
-function M.execute_operation(line_num)
+---Get instance from line number
+---@param line_num number Line number in scope buffer
+---@return table|nil instance The instance or nil if not found
+local function get_instance_from_line(line_num)
   local instance_idx = M.scope_state.line_to_instance and M.scope_state.line_to_instance[line_num]
   if not instance_idx or not M.scope_state.node_map[instance_idx] then
-    return
+    return nil
+  end
+  return M.scope_state.node_map[instance_idx]
+end
+
+---Prepare for operation execution
+---@return table|nil state Operation state or nil if invalid
+local function prepare_operation_state()
+  local state = {
+    action = M.scope_state.action,
+    textobj = M.scope_state.textobj,
+    source_buf = M.scope_state.source_buffer,
+    saved_pos = M.scope_state.saved_pos,
+    saved_buf = M.scope_state.saved_buf,
+    saved_win = M.scope_state.saved_win,
+  }
+
+  if not state.textobj then
+    return nil
   end
 
-  local instance = M.scope_state.node_map[instance_idx]
+  return state
+end
 
-  local action = M.scope_state.action
-  local textobj = M.scope_state.textobj
-  local source_buf = M.scope_state.source_buffer
-  local saved_pos = M.scope_state.saved_pos
-  local saved_buf = M.scope_state.saved_buf
-  local saved_win = M.scope_state.saved_win -- Get the saved window from state
-
-  -- Guard against nil textobj
-  if not textobj then
-    return
+---Execute operation at instance location
+---@param instance table Instance to operate on
+---@param state table Operation state
+local function execute_at_instance(instance, state)
+  -- Switch to source buffer
+  if vim.api.nvim_get_current_buf() ~= state.source_buf then
+    vim.api.nvim_set_current_buf(state.source_buf)
   end
 
-  -- Clean up BeamScope UI first
-  M.cleanup_scope()
-
-  -- After cleanup, we should return to the original window if it still exists
-  if saved_win and vim.api.nvim_win_is_valid(saved_win) then
-    vim.api.nvim_set_current_win(saved_win)
-  end
-
-  -- Save the return position for yank/delete operations
-  local should_return = (action == 'yank' or action == 'delete')
-  local return_pos = should_return and saved_pos or nil
-
-  -- Switch to source buffer temporarily to execute the operation
-  if vim.api.nvim_get_current_buf() ~= source_buf then
-    vim.api.nvim_set_current_buf(source_buf)
-  end
-
-  -- Jump to the code block
+  -- Jump to instance location
   vim.api.nvim_win_set_cursor(0, { instance.start_line, instance.start_col })
 
-  -- Execute the actual text object operation
-  ---@diagnostic disable-next-line: need-check-nil
-  local textobj_key = #textobj == 1 and textobj or textobj:sub(2)
-  ---@diagnostic disable-next-line: need-check-nil
-  local variant = #textobj > 1 and textobj:sub(1, 1) or nil -- 'i' or 'a' for text objects
+  -- Execute the operation
+  execute_textobj_operation(state.textobj, instance, state.action)
+end
 
-  -- Check for custom implementations
-  if custom_text_objects.is_custom(textobj_key) then
-    -- Get the custom object definition
-    local custom_obj = custom_text_objects.get(textobj_key)
-    -- Get the selection bounds from the custom text object
-    local bounds = custom_text_objects.select(textobj_key, instance, action, variant)
-    if bounds then
-      vim.api.nvim_win_set_cursor(0, bounds.start)
-      -- Determine visual mode from object metadata
-      local visual_mode = custom_obj and custom_obj.visual_mode or 'characterwise'
-      ---@diagnostic disable-next-line: param-type-mismatch
-      execute_visual_operation(bounds, action, visual_mode or 'characterwise')
-    end
-  elseif custom_motions.is_custom(textobj_key) then
-    -- Custom motion handling (single-letter like L)
-    local custom_motion = custom_motions.get(textobj_key)
-    local bounds = custom_motions.select(textobj_key, instance, action)
-    if bounds then
-      vim.api.nvim_win_set_cursor(0, bounds.start)
-      -- Motions are typically characterwise
-      local visual_mode = custom_motion and custom_motion.visual_mode or 'characterwise'
-      bounds.is_motion = true -- Mark as motion for proper column handling
-      ---@diagnostic disable-next-line: param-type-mismatch
-      execute_visual_operation(bounds, action, visual_mode or 'characterwise')
-    end
-  else
-    -- For other text objects, use the standard vim commands
-    ---@diagnostic disable-next-line: param-type-mismatch
-    execute_standard_operation(textobj, action)
+function M.execute_operation(line_num)
+  -- Get instance from line
+  local instance = get_instance_from_line(line_num)
+  if not instance then
+    return
   end
 
-  -- Return to original position if needed
-  if return_pos and saved_buf then
-    restore_original_position(saved_win, saved_buf, return_pos)
+  -- Prepare operation state
+  local state = prepare_operation_state()
+  if not state then
+    return
   end
+
+  -- Clean up BeamScope UI
+  M.cleanup_scope()
+
+  -- Return to original window after cleanup
+  if state.saved_win and vim.api.nvim_win_is_valid(state.saved_win) then
+    vim.api.nvim_set_current_win(state.saved_win)
+  end
+
+  -- Execute the operation
+  execute_at_instance(instance, state)
+
+  -- Return to original position for yank/delete
+  local should_return = (state.action == 'yank' or state.action == 'delete')
+  if should_return and state.saved_pos and state.saved_buf then
+    restore_original_position(state.saved_win, state.saved_buf, state.saved_pos)
+  end
+end
+
+---Create navigation function for jumping between instances
+---@param scope_buf number Scope buffer handle
+---@return function Navigation function
+local function create_navigation_function(scope_buf)
+  return function(direction)
+    local current_line = vim.api.nvim_win_get_cursor(0)[1]
+    local current_instance = M.scope_state.line_to_instance[current_line]
+
+    if not current_instance then
+      -- Find nearest instance in given direction
+      local start, stop, step = current_line + 1, vim.api.nvim_buf_line_count(scope_buf), 1
+      if direction == -1 then
+        start, stop, step = current_line - 1, 1, -1
+      end
+
+      for line = start, stop, step do
+        if M.scope_state.line_to_instance[line] then
+          vim.api.nvim_win_set_cursor(0, { line, 0 })
+          return
+        end
+      end
+      return
+    end
+
+    -- Find next/previous instance with wrapping
+    local target_instance = current_instance + direction
+    if target_instance < 1 then
+      target_instance = #M.scope_state.node_map -- Wrap to last
+    elseif target_instance > #M.scope_state.node_map then
+      target_instance = 1 -- Wrap to first
+    end
+
+    -- Jump to target instance
+    local target_node = M.scope_state.node_map[target_instance]
+    if target_node and target_node.display_start then
+      vim.api.nvim_win_set_cursor(0, { target_node.display_start, 0 })
+    end
+  end
+end
+
+---Setup keymaps for BeamScope buffer
+---@param scope_buf number Scope buffer handle
+---@param jump_to_next_instance function Navigation function
+local function setup_scope_keymaps(scope_buf, jump_to_next_instance)
+  -- Enter key for selection
+  vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<CR>', '', {
+    callback = function()
+      local line = vim.api.nvim_win_get_cursor(0)[1]
+      M.execute_operation(line)
+    end,
+    noremap = true,
+    silent = true,
+    desc = 'Execute operation on selected text object',
+  })
+
+  -- Navigation keymaps
+  local nav_keys = {
+    ['<C-n>'] = { direction = 1, desc = 'Next text object instance' },
+    ['<C-p>'] = { direction = -1, desc = 'Previous text object instance' },
+    ['J'] = { direction = 1, desc = 'Jump to next text object' },
+    ['K'] = { direction = -1, desc = 'Jump to previous text object' },
+    ['<Tab>'] = { direction = 1, desc = 'Next text object instance' },
+    ['<S-Tab>'] = { direction = -1, desc = 'Previous text object instance' },
+  }
+
+  for key, opts in pairs(nav_keys) do
+    vim.api.nvim_buf_set_keymap(scope_buf, 'n', key, '', {
+      callback = function()
+        jump_to_next_instance(opts.direction)
+      end,
+      noremap = true,
+      silent = true,
+      desc = opts.desc,
+    })
+  end
+
+  -- Cancel/quit keymaps
+  local cancel_keys = { '<Esc>', 'q' }
+  for _, key in ipairs(cancel_keys) do
+    vim.api.nvim_buf_set_keymap(scope_buf, 'n', key, '', {
+      callback = function()
+        M.cleanup_scope()
+      end,
+      noremap = true,
+      silent = true,
+      desc = key == '<Esc>' and 'Cancel BeamScope operation' or 'Quit BeamScope',
+    })
+  end
+end
+
+---Setup search handling for BeamScope
+---@param scope_buf number Scope buffer handle
+---@param augroup number Autocommand group ID
+local function setup_search_handling(scope_buf, augroup)
+  local execute_on_search = false
+
+  -- Override Enter in command-line mode for search
+  vim.keymap.set('c', '<CR>', function()
+    local cmdtype = vim.fn.getcmdtype()
+    if cmdtype == '/' or cmdtype == '?' then
+      execute_on_search = true
+    end
+    return '<CR>'
+  end, { buffer = scope_buf, expr = true })
+
+  -- Handle search completion
+  vim.api.nvim_create_autocmd('CmdlineLeave', {
+    group = augroup,
+    buffer = scope_buf,
+    callback = function()
+      if execute_on_search then
+        execute_on_search = false
+        vim.defer_fn(function()
+          if vim.api.nvim_get_current_buf() == scope_buf then
+            local line = vim.api.nvim_win_get_cursor(0)[1]
+            M.execute_operation(line)
+          end
+        end, 50)
+      end
+    end,
+  })
+end
+
+---Find closest instance in a direction
+---@param instances table Array of instances
+---@param cursor_line number Current cursor line
+---@param prefer_below boolean Whether to prefer instances below cursor
+---@return number best_instance Index of best instance
+local function find_closest_instance(instances, cursor_line, prefer_below)
+  local best_instance = 1
+  local min_distance = math.huge
+
+  for i, instance in ipairs(instances) do
+    local is_match = prefer_below and (instance.start_line >= cursor_line)
+      or (not prefer_below and instance.start_line < cursor_line)
+
+    if is_match then
+      local distance = math.abs(instance.start_line - cursor_line)
+      if distance < min_distance then
+        min_distance = distance
+        best_instance = i
+      end
+    end
+  end
+
+  return min_distance < math.huge and best_instance or nil
+end
+
+---Find best initial cursor position based on saved position
+---@param instances table Array of text object instances
+---@param saved_pos table|nil Saved cursor position
+---@return number initial_line Line number for initial cursor position
+local function find_best_initial_position(instances, saved_pos)
+  if not saved_pos or saved_pos[2] <= 0 then
+    return 1
+  end
+
+  local cursor_line = saved_pos[2]
+
+  -- Try to find instance at or below cursor first
+  local best_instance = find_closest_instance(instances, cursor_line, true)
+
+  -- If none found below, find closest above
+  if not best_instance then
+    best_instance = find_closest_instance(instances, cursor_line, false) or 1
+  end
+
+  local target_node = M.scope_state.node_map[best_instance]
+  return (target_node and target_node.display_start) or 1
 end
 
 -- Main entry point for BeamScope
@@ -893,201 +1063,17 @@ function M.beam_scope(action, textobj)
     end,
   })
 
-  -- Set up Enter key for both normal mode and after search
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<CR>', '', {
-    callback = function()
-      local line = vim.api.nvim_win_get_cursor(0)[1]
-      M.execute_operation(line)
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Execute operation on selected text object',
-  })
+  -- Setup search handling
+  setup_search_handling(scope_buf, augroup)
 
-  -- Track if we want to execute on search completion
-  local execute_on_search = false
+  -- Create a closure for navigation that captures scope_buf
+  local jump_to_next_instance = create_navigation_function(scope_buf)
 
-  -- Override Enter in command-line mode for search
-  vim.keymap.set('c', '<CR>', function()
-    local cmdtype = vim.fn.getcmdtype()
-    if cmdtype == '/' or cmdtype == '?' then
-      execute_on_search = true
-    end
-    return '<CR>'
-  end, { buffer = scope_buf, expr = true })
+  -- Setup all keymaps
+  setup_scope_keymaps(scope_buf, jump_to_next_instance)
 
-  -- Handle search completion
-  vim.api.nvim_create_autocmd('CmdlineLeave', {
-    group = augroup,
-    buffer = scope_buf,
-    callback = function()
-      if execute_on_search then
-        execute_on_search = false
-        -- Small delay to let cursor position update after search
-        vim.defer_fn(function()
-          if vim.api.nvim_get_current_buf() == scope_buf then
-            local line = vim.api.nvim_win_get_cursor(0)[1]
-            M.execute_operation(line)
-          end
-        end, 50)
-      end
-    end,
-  })
-
-  -- Navigation helper function
-  local function jump_to_next_instance(direction)
-    local current_line = vim.api.nvim_win_get_cursor(0)[1]
-    local current_instance = M.scope_state.line_to_instance[current_line]
-
-    if not current_instance then
-      -- If not on an instance, find the nearest one
-      if direction == 1 then
-        for line = current_line + 1, vim.api.nvim_buf_line_count(scope_buf) do
-          if M.scope_state.line_to_instance[line] then
-            vim.api.nvim_win_set_cursor(0, { line, 0 })
-            return
-          end
-        end
-      else
-        for line = current_line - 1, 1, -1 do
-          if M.scope_state.line_to_instance[line] then
-            vim.api.nvim_win_set_cursor(0, { line, 0 })
-            return
-          end
-        end
-      end
-      return
-    end
-
-    -- Find next/previous instance
-    local target_instance = current_instance + direction
-    if target_instance < 1 then
-      target_instance = #M.scope_state.node_map -- Wrap to last
-    elseif target_instance > #M.scope_state.node_map then
-      target_instance = 1 -- Wrap to first
-    end
-
-    -- Find line for target instance
-    local target_node = M.scope_state.node_map[target_instance]
-    if target_node and target_node.display_start then
-      vim.api.nvim_win_set_cursor(0, { target_node.display_start, 0 })
-    end
-  end
-
-  -- Set up navigation keybindings using Ctrl-n/Ctrl-p
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<C-n>', '', {
-    callback = function()
-      jump_to_next_instance(1)
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Next text object instance',
-  })
-
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<C-p>', '', {
-    callback = function()
-      jump_to_next_instance(-1)
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Previous text object instance',
-  })
-
-  -- Alternative navigation with j/k (jump between instances, not lines)
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', 'J', '', {
-    callback = function()
-      jump_to_next_instance(1)
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Jump to next text object',
-  })
-
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', 'K', '', {
-    callback = function()
-      jump_to_next_instance(-1)
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Jump to previous text object',
-  })
-
-  -- Tab/Shift-Tab navigation
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<Tab>', '', {
-    callback = function()
-      jump_to_next_instance(1)
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Next text object instance',
-  })
-
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<S-Tab>', '', {
-    callback = function()
-      jump_to_next_instance(-1)
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Previous text object instance',
-  })
-
-  -- Set up cancel
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<Esc>', '', {
-    callback = function()
-      M.cleanup_scope()
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Cancel BeamScope operation',
-  })
-
-  vim.api.nvim_buf_set_keymap(scope_buf, 'n', 'q', '', {
-    callback = function()
-      M.cleanup_scope()
-    end,
-    noremap = true,
-    silent = true,
-    desc = 'Quit BeamScope',
-  })
-
-  -- Find the best initial position based on cursor location
-  local initial_line = 1
-  if saved_pos and saved_pos[2] > 0 then
-    local cursor_line = saved_pos[2]
-    local best_instance = 1
-    local min_distance = math.huge
-
-    -- Find the text object instance closest to (preferably below) the cursor
-    for i, instance in ipairs(instances) do
-      -- Prefer instances at or below cursor position
-      if instance.start_line >= cursor_line then
-        local distance = instance.start_line - cursor_line
-        if distance < min_distance then
-          min_distance = distance
-          best_instance = i
-        end
-      end
-    end
-
-    -- If no instance below cursor, find the closest one above
-    if min_distance == math.huge then
-      for i, instance in ipairs(instances) do
-        if instance.start_line < cursor_line then
-          local distance = cursor_line - instance.start_line
-          if distance < min_distance then
-            min_distance = distance
-            best_instance = i
-          end
-        end
-      end
-    end
-
-    -- Set cursor to the display position of the best instance
-    local target_node = M.scope_state.node_map[best_instance]
-    if target_node and target_node.display_start then
-      initial_line = target_node.display_start
-    end
-  end
+  -- Find the best initial position
+  local initial_line = find_best_initial_position(instances, saved_pos)
 
   -- Focus the BeamScope window and set cursor position
   vim.api.nvim_set_current_win(win)
@@ -1123,61 +1109,68 @@ end
 ---Check if BeamScope should be used for a text object
 ---@param textobj string Text object to check
 ---@return boolean should_use Whether to use BeamScope
-function M.should_use_scope(textobj)
+---Check if BeamScope is available for use
+---@return boolean enabled Whether BeamScope can be used
+---@return string|nil reason Reason why it's not available
+local function is_beam_scope_available()
   local cfg = config.current
 
-  -- Check if BeamScope is enabled
   if not cfg.beam_scope or not cfg.beam_scope.enabled then
-    return false
+    return false, 'disabled'
   end
 
-  -- BeamScope is incompatible with cross-buffer operations
   if cfg.cross_buffer and cfg.cross_buffer.enabled then
+    return false, 'cross_buffer_enabled'
+  end
+
+  return true, nil
+end
+
+---Get the search key from a text object
+---@param textobj string Text object string
+---@return string key The key to search for
+local function get_textobj_key(textobj)
+  return #textobj == 1 and textobj or textobj:sub(2)
+end
+
+---Log debug information if enabled
+---@param message string Message to log
+---@param level number|nil Log level (default: DEBUG)
+local function debug_log(message, level)
+  if vim.g.beam_debug then
+    vim.notify(message, level or vim.log.levels.DEBUG)
+  end
+end
+
+function M.should_use_scope(textobj)
+  -- Check availability
+  local available, reason = is_beam_scope_available()
+  if not available then
+    debug_log(string.format('BeamScope unavailable: %s', reason))
     return false
   end
 
-  -- Check if this text object is configured for BeamScope
+  local cfg = config.current
   local scoped_objects = cfg.beam_scope.scoped_text_objects or {}
   local custom_objects = cfg.beam_scope.custom_scoped_text_objects or {}
 
-  -- Determine what to search for: single letter or extracted key
-  local search_targets = {}
+  -- Get the key to search for
+  local key = get_textobj_key(textobj)
 
-  -- Single-letter motions check directly
-  if #textobj == 1 then
-    table.insert(search_targets, textobj)
-  else
-    -- Text objects with i/a prefix - extract the key
-    table.insert(search_targets, textobj:sub(2))
+  -- Debug logging for multi-character objects
+  if #textobj > 1 then
+    debug_log(string.format('BeamScope check: textobj=%s, key=%s', textobj, key))
   end
 
-  -- Debug logging
-  if vim.g.beam_debug and #textobj > 1 then
-    vim.notify(
-      string.format('BeamScope check: textobj=%s, key=%s', textobj, textobj:sub(2)),
-      vim.log.levels.DEBUG
-    )
+  -- Check if key is in either list
+  local is_scoped = is_in_scoped_list(key, scoped_objects, 'default')
+    or is_in_scoped_list(key, custom_objects, 'custom')
+
+  if not is_scoped then
+    debug_log(string.format('BeamScope: No match for %s in %s', key, vim.inspect(scoped_objects)))
   end
 
-  -- Check all targets against both lists
-  for _, target in ipairs(search_targets) do
-    if
-      is_in_scoped_list(target, scoped_objects, 'default')
-      or is_in_scoped_list(target, custom_objects, 'custom')
-    then
-      return true
-    end
-  end
-
-  if vim.g.beam_debug then
-    local debug_key = #textobj == 1 and textobj or textobj:sub(2)
-    vim.notify(
-      string.format('BeamScope: No match for %s in %s', debug_key, vim.inspect(scoped_objects)),
-      vim.log.levels.DEBUG
-    )
-  end
-
-  return false
+  return is_scoped
 end
 
 return M
