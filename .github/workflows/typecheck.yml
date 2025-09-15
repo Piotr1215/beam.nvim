@@ -1,0 +1,20 @@
+name: Type Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck:
+    name: Type Check with lua-language-server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Type Check
+        uses: mrcjkb/lua-typecheck-action@v0
+        with:
+          directories: lua
+          configpath: .luarc.json

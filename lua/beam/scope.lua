@@ -755,6 +755,11 @@ function M.execute_operation(line_num)
   local saved_buf = M.scope_state.saved_buf
   local saved_win = M.scope_state.saved_win -- Get the saved window from state
 
+  -- Guard against nil textobj
+  if not textobj then
+    return
+  end
+
   -- Clean up BeamScope UI first
   M.cleanup_scope()
 
@@ -776,7 +781,9 @@ function M.execute_operation(line_num)
   vim.api.nvim_win_set_cursor(0, { instance.start_line, instance.start_col })
 
   -- Execute the actual text object operation
+  ---@diagnostic disable-next-line: need-check-nil
   local textobj_key = #textobj == 1 and textobj or textobj:sub(2)
+  ---@diagnostic disable-next-line: need-check-nil
   local variant = #textobj > 1 and textobj:sub(1, 1) or nil -- 'i' or 'a' for text objects
 
   -- Check for custom implementations
@@ -789,7 +796,8 @@ function M.execute_operation(line_num)
       vim.api.nvim_win_set_cursor(0, bounds.start)
       -- Determine visual mode from object metadata
       local visual_mode = custom_obj and custom_obj.visual_mode or 'characterwise'
-      execute_visual_operation(bounds, action, visual_mode)
+      ---@diagnostic disable-next-line: param-type-mismatch
+      execute_visual_operation(bounds, action, visual_mode or 'characterwise')
     end
   elseif custom_motions.is_custom(textobj_key) then
     -- Custom motion handling (single-letter like L)
@@ -800,10 +808,12 @@ function M.execute_operation(line_num)
       -- Motions are typically characterwise
       local visual_mode = custom_motion and custom_motion.visual_mode or 'characterwise'
       bounds.is_motion = true -- Mark as motion for proper column handling
-      execute_visual_operation(bounds, action, visual_mode)
+      ---@diagnostic disable-next-line: param-type-mismatch
+      execute_visual_operation(bounds, action, visual_mode or 'characterwise')
     end
   else
     -- For other text objects, use the standard vim commands
+    ---@diagnostic disable-next-line: param-type-mismatch
     execute_standard_operation(textobj, action)
   end
 
@@ -838,7 +848,7 @@ function M.beam_scope(action, textobj)
 
   if #instances == 0 then
     vim.notify('No instances of text object "' .. textobj .. '" found', vim.log.levels.WARN)
-    return
+    return false
   end
 
   -- Store operation state
@@ -1085,6 +1095,8 @@ function M.beam_scope(action, textobj)
 
   -- Show preview for the selected position
   M.update_preview(initial_line)
+
+  return true
 end
 
 -- Check if a text object should use BeamScope

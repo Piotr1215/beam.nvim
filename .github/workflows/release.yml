@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, including all commits"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            echo "Generating changelog from $PREV_TAG to ${{ github.ref_name }}"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD)
+          fi
+
+          # Create changelog
+          {
+            echo "## What's Changed"
+            echo ""
+            echo "$COMMITS" | grep -E "^- feat" || true
+            echo ""
+            echo "## Bug Fixes"
+            echo "$COMMITS" | grep -E "^- fix" || true
+            echo ""
+            echo "## Other Changes"
+            echo "$COMMITS" | grep -vE "^- (feat|fix)" || true
+          } > CHANGELOG.md
+
+          cat CHANGELOG.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  luarocks-release:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: LuaRocks Upload
+        uses: nvim-neorocks/luarocks-tag-release@v7
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        with:
+          spec_name: "beam.nvim-scm-1.rockspec"

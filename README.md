@@ -18,6 +18,7 @@ Or easier if you know that next object to change is right below.
 
 [![Neovim](https://img.shields.io/badge/Neovim-0.8+-green.svg?style=flat-square&logo=neovim)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Lua-5.1+-blue.svg?style=flat-square&logo=lua)](https://www.lua.org)
+[![CI](https://github.com/Piotr1215/beam.nvim/actions/workflows/test.yml/badge.svg)](https://github.com/Piotr1215/beam.nvim/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
 </div>

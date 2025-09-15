@@ -442,7 +442,7 @@ function M.discover_motions()
     -- Single letter mappings that aren't built-in vim motions and not excluded
     if lhs and #lhs == 1 and not lhs:match('[hjklwbeWBE0$^{}()]') and not excluded[lhs] then
       -- These are likely custom motions from plugins
-      local desc = map.desc or 'motion to ' .. lhs
+      local desc = map.desc or ('motion to ' .. lhs)
       motions[lhs] = desc
     end
   end

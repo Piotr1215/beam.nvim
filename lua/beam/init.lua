@@ -33,7 +33,7 @@ local function check_config_compatibility()
 end
 
 ---Register custom text objects from configuration
----@param opts? table User configuration options
+---@param opts table|nil User configuration options
 local function register_custom_text_objects(opts)
   if not opts or not opts.custom_text_objects then
     return
@@ -99,7 +99,7 @@ local function auto_discover_text_objects()
   -- Delay discovery slightly to allow plugins to load
   vim.defer_fn(function()
     local result = discovery.auto_register_text_objects({
-      conflict_resolution = config.current.discovery_conflict_resolution or 'skip',
+      conflict_resolution = 'skip', -- Always skip conflicts for auto-discovery
       show_conflicts = false,
     })
 
@@ -108,7 +108,7 @@ local function auto_discover_text_objects()
   end, 500)
 end
 
----@param opts? BeamConfig|table User configuration options
+---@param opts BeamConfig|table|nil User configuration options
 function M.setup(opts)
   config.setup(opts)
   check_config_compatibility()

@@ -1,0 +1,37 @@
+name: Neovim checkhealth
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  checkhealth:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        neovim: [stable, nightly]
+
+    runs-on: ${{ matrix.os }}
+    name: "OS: ${{ matrix.os }} - Neovim: ${{ matrix.neovim }}"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+
+      - name: Run :checkhealth beam
+        run: |
+          nvim --headless -c "checkhealth beam" -c "qa!" 2>&1 | tee health.log
+          if grep -q "ERROR" health.log; then
+            echo "Health check found errors!"
+            cat health.log
+            exit 1
+          fi
+          echo "Health check passed!"

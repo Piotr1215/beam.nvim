@@ -139,16 +139,18 @@ M.line_operators = {
 M.current = {}
 
 ---Apply backward compatibility transformations
----@param opts table User options
+---@param opts table|nil User options
 local function apply_backward_compatibility(opts)
   if not opts then
     return
   end
 
-  -- Convert boolean cross_buffer to table format
+  -- Convert boolean cross_buffer to table format for backward compatibility
   if type(M.current.cross_buffer) == 'boolean' then
+    ---@diagnostic disable-next-line: assign-type-mismatch
+    local enabled = M.current.cross_buffer == true
     M.current.cross_buffer = {
-      enabled = M.current.cross_buffer,
+      enabled = enabled,
       fuzzy_finder = 'telescope',
       include_hidden = false,
     }
@@ -187,7 +189,7 @@ local function apply_feature_compatibility()
   end
 end
 
----@param opts? BeamConfig|table User configuration options
+---@param opts BeamConfig|table|nil User configuration options
 ---@return BeamConfig
 function M.setup(opts)
   M.current = vim.tbl_deep_extend('force', M.defaults, opts or {})
