@@ -1,0 +1,14 @@
+return {
+  _all = {
+    coverage = false,
+    lua = './test/nvim-shim'
+  },
+  unit = {
+    ROOT = {'./test/unit/'},
+    pattern = '_spec%.lua$',
+  },
+  functional = {
+    ROOT = {'./test/functional/'},
+    pattern = '_spec%.lua$',
+  },
+}

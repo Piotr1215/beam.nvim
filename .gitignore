@@ -1,3 +1,30 @@
+# Test artifacts
 .tests/
+test/xdg/
+test/nvim-shim
+
+# Logs
 *.log
+
+# OS files
 .DS_Store
+
+# Lux/build artifacts
+.lux/
+build/
+*.rock
+
+# Luarocks
+luarocks/
+lua_modules/
+
+# Editor directories
+.idea/
+.vscode/
+
+# Neovim
+.netrwhist
+*~
+
+# Lua language server
+.luarc.json

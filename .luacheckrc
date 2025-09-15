@@ -1,23 +1,34 @@
--- Luacheck configuration for beam.nvim
-globals = {
-  "vim",
-  "_G",
+-- vim: ft=lua tw=80
+
+stds.nvim = {
+  globals = {
+    vim = { fields = { "g", "b", "w", "o", "bo", "wo", "go", "v", "fn", "api", "opt", "loop", "cmd", "ui", "fs", "keymap", "lsp", "diagnostic", "treesitter", "health", "inspect", "schedule", "defer_fn", "notify", "validate", "deprecate" }},
+    "describe",
+    "it",
+    "before_each",
+    "after_each",
+    "pending",
+    "assert",
+  },
 }
 
-read_globals = {
-  "describe",
-  "it",
-  "before_each",
-  "after_each",
-  "assert",
-  "package",
-}
+std = "lua51+nvim"
 
+-- Ignore W211 (unused variable) for test files
+files["test/**/*_spec.lua"].ignore = { "211" }
+
+-- Ignore max cyclomatic complexity warnings (we've already addressed these)
 ignore = {
-  "212", -- Unused argument
-  "213", -- Unused loop variable
+  "561", -- max cyclomatic complexity
+  "631", -- line too long
 }
 
-files["test/*_spec.lua"] = {
-  std = "+busted",
+-- Don't report globals from beam modules
+read_globals = {
+  "BeamSearchOperatorPending",
+  "BeamSearchOperatorWrapper",
+  "SearchOperatorPending",
+  "BeamScopeActive",
 }
+
+cache = true

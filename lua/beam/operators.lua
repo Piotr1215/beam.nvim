@@ -1,169 +1,148 @@
 ---@class BeamOperators
 local M = {}
 local config = require('beam.config')
-local search_transform = require('beam.search_transform')
+local operation_strategies = require('beam.operation_strategies')
+local constants = require('beam.constants')
+local cross_buffer = require('beam.cross_buffer_search')
+local smart_search = require('beam.smart_search')
 
 ---Execute the beam search operator
 ---@param type string The motion type (unused but required by operatorfunc)
 ---@return nil
 M.BeamSearchOperator = function(type)
-  local pattern = vim.g.beam_search_operator_pattern
-  local saved_pos = vim.g.beam_search_operator_saved_pos
-  local saved_buf = vim.g.beam_search_operator_saved_buf
-  local textobj = vim.g.beam_search_operator_textobj
-  local action = vim.g.beam_search_operator_action
-
-  if not pattern or not textobj or not action then
+  local context = M.get_operator_context()
+  if not M.validate_operator_context(context) then
     return
   end
 
-  local saved_reg = vim.fn.getreg('"')
-  local saved_reg_type = vim.fn.getregtype('"')
-  local saved_search = vim.fn.getreg('/')
+  local state = M.save_editor_state()
+  local ok = M.execute_operation(context)
+  M.restore_editor_state(state, context, ok)
+  M.cleanup_search_operator_state()
+end
 
-  local ok = pcall(function()
+---Get operator context from global variables
+---@return table context
+function M.get_operator_context()
+  return {
+    pattern = vim.g.beam_search_operator_pattern,
+    saved_pos = vim.g.beam_search_operator_saved_pos,
+    saved_buf = vim.g.beam_search_operator_saved_buf,
+    textobj = vim.g.beam_search_operator_textobj,
+    action = vim.g.beam_search_operator_action,
+  }
+end
+
+---Validate operator context
+---@param context table
+---@return boolean valid
+function M.validate_operator_context(context)
+  return context.pattern and context.textobj and context.action
+end
+
+---Save editor state
+---@return table state
+function M.save_editor_state()
+  return {
+    reg = vim.fn.getreg('"'),
+    reg_type = vim.fn.getregtype('"'),
+    search = vim.fn.getreg('/'),
+  }
+end
+
+---Execute the operation
+---@param context table
+---@return boolean success
+function M.execute_operation(context)
+  return pcall(function()
     local cfg = config.current
-    local feedback_duration = cfg.visual_feedback_duration or 150
+    local feedback_duration = cfg.visual_feedback_duration or constants.VISUAL_FEEDBACK_DURATION
 
-    -- Special handling for markdown code block text objects
-    if textobj == 'im' or textobj == 'am' then
-      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-      local last_line = vim.api.nvim_buf_line_count(0)
+    -- Special handling for markdown code blocks
+    if M.is_markdown_codeblock(context.textobj) then
+      return operation_strategies.handle_markdown_codeblock(
+        context.action,
+        context.textobj,
+        feedback_duration
+      )
+    end
 
-      -- Search backward for opening ```
-      local start_line = nil
-      for i = cursor_line, 1, -1 do
-        local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-        if line:match('^%s*```') then
-          start_line = i
-          break
-        end
-      end
-
-      if not start_line then
-        return
-      end
-
-      -- Search forward for closing ```
-      local end_line = nil
-      for i = start_line + 1, last_line do
-        local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
-        if line:match('^%s*```') then
-          end_line = i
-          break
-        end
-      end
-
-      if not end_line then
-        return
-      end
-
-      if textobj == 'im' then
-        -- Inside: exclude backticks
-        start_line = start_line + 1
-        end_line = end_line - 1
-      end
-
-      if start_line > end_line then
-        return
-      end
-
-      -- Execute the action on the code block
-      if action == 'yank' then
-        vim.api.nvim_win_set_cursor(0, { start_line, 0 })
-        vim.cmd('normal! V' .. end_line .. 'G')
-        vim.cmd('redraw')
-        vim.cmd('sleep ' .. feedback_duration .. 'm')
-        vim.cmd('normal! y')
-      elseif action == 'delete' then
-        vim.api.nvim_win_set_cursor(0, { start_line, 0 })
-        vim.cmd('normal! V' .. end_line .. 'Gd')
-      elseif action == 'change' then
-        vim.api.nvim_win_set_cursor(0, { start_line, 0 })
-        -- Use feedkeys to properly enter insert mode
-        vim.api.nvim_feedkeys('V' .. end_line .. 'Gc', 'n', false)
-      elseif action == 'visual' then
-        vim.api.nvim_win_set_cursor(0, { start_line, 0 })
-        vim.cmd('normal! V' .. end_line .. 'G')
-      end
-    elseif action == 'yank' then
-      vim.cmd('normal v' .. textobj)
-      vim.cmd('redraw')
-      vim.cmd('sleep ' .. feedback_duration .. 'm')
-      vim.cmd('normal! y')
-    elseif action == 'delete' then
-      vim.cmd('normal v' .. textobj)
-      vim.cmd('redraw')
-      vim.cmd('sleep ' .. feedback_duration .. 'm')
-      vim.cmd('normal! d')
-    elseif action == 'change' then
-      -- Delete content, position cursor, then enter insert mode
-      vim.cmd('normal! v' .. textobj .. 'd')
-      vim.cmd('normal a')
-      vim.cmd('startinsert')
-    elseif action == 'visual' then
-      vim.cmd('normal v' .. textobj)
-    elseif action == 'yankline' then
-      vim.cmd('normal! yy')
-    elseif action == 'deleteline' then
-      vim.cmd('normal! dd')
-    elseif action == 'changeline' then
-      vim.cmd('normal! cc')
-      vim.cmd('startinsert')
-    elseif action == 'visualline' then
-      vim.cmd('normal! V')
+    -- Use strategy pattern for standard operations
+    local strategy = operation_strategies.get_strategy(context.action)
+    if strategy then
+      return strategy.execute(context.textobj, feedback_duration)
     end
   end)
+end
 
-  if ok then
-    -- Yank and delete operations should restore cursor position
-    if
-      (action == 'yank' or action == 'delete' or action == 'yankline' or action == 'deleteline')
-      and saved_pos
-    then
-      -- Check if we need to restore to a different buffer
-      if saved_buf and vim.api.nvim_buf_is_valid(saved_buf) then
-        local current_buf = vim.api.nvim_get_current_buf()
-        if current_buf ~= saved_buf then
-          -- Switch back to the original buffer
-          vim.api.nvim_set_current_buf(saved_buf)
-        end
-      end
-      -- Always restore position if we have it
-      if saved_pos then
-        vim.fn.setpos('.', saved_pos)
-      end
-    end
+---Check if textobj is markdown codeblock
+---@param textobj string
+---@return boolean
+function M.is_markdown_codeblock(textobj)
+  return textobj == constants.SPECIAL_TEXTOBJS.MARKDOWN_CODE_INNER
+    or textobj == constants.SPECIAL_TEXTOBJS.MARKDOWN_CODE_AROUND
+end
 
-    local cfg = config.current
-    if
-      cfg.clear_highlight
-      and action ~= 'change'
-      and action ~= 'visual'
-      and action ~= 'changeline'
-      and action ~= 'visualline'
-    then
-      vim.defer_fn(function()
-        vim.cmd('nohlsearch')
-        vim.fn.setreg('/', saved_search)
-      end, cfg.clear_highlight_delay or 500)
-    end
+---Restore editor state
+---@param state table
+---@param context table
+---@param success boolean
+function M.restore_editor_state(state, context, success)
+  if success then
+    M.handle_successful_operation(context, state)
   else
-    if saved_pos then
-      -- Restore buffer if needed
-      if saved_buf and vim.api.nvim_buf_is_valid(saved_buf) then
-        local current_buf = vim.api.nvim_get_current_buf()
-        if current_buf ~= saved_buf then
-          vim.api.nvim_set_current_buf(saved_buf)
-        end
-      end
-      vim.fn.setpos('.', saved_pos)
-    end
-    vim.fn.setreg('"', saved_reg, saved_reg_type)
-    vim.fn.setreg('/', saved_search)
-    vim.cmd('nohlsearch')
+    M.handle_failed_operation(context, state)
+  end
+end
+
+---Handle successful operation
+---@param context table
+---@param state table
+function M.handle_successful_operation(context, state)
+  -- Handle position restoration
+  if operation_strategies.should_return_to_origin(context.action) and context.saved_pos then
+    M.restore_position(context.saved_buf, context.saved_pos)
   end
 
+  -- Handle highlight clearing
+  local cfg = config.current
+  if cfg.clear_highlight and operation_strategies.should_clear_highlight(context.action) then
+    vim.defer_fn(function()
+      vim.cmd('nohlsearch')
+      vim.fn.setreg('/', state.search)
+    end, cfg.clear_highlight_delay or 500)
+  end
+end
+
+---Handle failed operation
+---@param context table
+---@param state table
+function M.handle_failed_operation(context, state)
+  if context.saved_pos then
+    M.restore_position(context.saved_buf, context.saved_pos)
+  end
+  vim.fn.setreg('"', state.reg, state.reg_type)
+  vim.fn.setreg('/', state.search)
+  vim.cmd('nohlsearch')
+end
+
+---Helper function to restore position
+---@param saved_buf number|nil
+---@param saved_pos table|nil
+function M.restore_position(saved_buf, saved_pos)
+  if saved_buf and vim.api.nvim_buf_is_valid(saved_buf) then
+    local current_buf = vim.api.nvim_get_current_buf()
+    if current_buf ~= saved_buf then
+      vim.api.nvim_set_current_buf(saved_buf)
+    end
+  end
+  if saved_pos then
+    vim.fn.setpos('.', saved_pos)
+  end
+end
+
+---Helper function to cleanup search operator state
+function M.cleanup_search_operator_state()
   vim.g.beam_search_operator_pattern = nil
   vim.g.beam_search_operator_saved_pos = nil
   vim.g.beam_search_operator_textobj = nil
@@ -204,125 +183,71 @@ M.BeamExecuteSearchOperator = function()
 end
 
 M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
-  -- This is the actual implementation, moved from BeamExecuteSearchOperator
   local cfg = config.current
+  local found = M.perform_search(pattern, pending, cfg)
 
-  -- Cross-buffer search if enabled
+  if found == 0 then
+    M.cleanup_pending_state()
+    return
+  end
+
+  M.setup_operator_state(pattern, pending)
+  M.execute_operator()
+end
+
+---Perform search with optional cross-buffer support
+---@param pattern string
+---@param pending table
+---@param cfg table
+---@return number found
+function M.perform_search(pattern, pending, cfg)
   if cfg.cross_buffer and cfg.cross_buffer.enabled then
-    local start_buf = vim.api.nvim_get_current_buf()
-    local start_pos = vim.api.nvim_win_get_cursor(0)
-
-    -- Check current buffer first
-    local found = vim.fn.search(pattern, 'c')
-
-    if found == 0 then
-      -- Search other buffers
-      local buffers = vim.fn.getbufinfo({ buflisted = 1 })
-
-      -- Build a set of visible buffers if include_hidden is false
-      local visible_buffers = nil
-      local include_hidden = cfg.cross_buffer.include_hidden
-      if include_hidden == false or include_hidden == 'false' then
-        visible_buffers = {}
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-          local bufnr = vim.api.nvim_win_get_buf(win)
-          visible_buffers[bufnr] = true
-        end
-      end
-
-      for _, buf in ipairs(buffers) do
-        -- Skip hidden buffers if include_hidden is false
-        if not (visible_buffers and not visible_buffers[buf.bufnr]) then
-          if
-            buf.bufnr ~= start_buf
-            and vim.api.nvim_buf_is_valid(buf.bufnr)
-            and vim.api.nvim_buf_is_loaded(buf.bufnr)
-          then
-            -- For yank/delete, we need to temporarily switch to execute the operation
-            -- For change/visual, we want to open/switch to the buffer
-
-            if pending.action == 'change' or pending.action == 'visual' then
-              -- Check if buffer is already visible in a window
-              local win_id = vim.fn.bufwinnr(buf.bufnr)
-
-              if win_id > 0 then
-                -- Buffer is visible, switch to that window
-                vim.cmd(win_id .. 'wincmd w')
-              else
-                -- Open in a split for editing
-                vim.cmd('split | buffer ' .. buf.bufnr)
-              end
-            else
-              -- For yank/delete, just temporarily switch in current window
-              -- We'll restore after the operation
-              vim.cmd('buffer ' .. buf.bufnr)
-            end
-
-            vim.api.nvim_win_set_cursor(0, { 1, 0 })
-
-            -- Search in this buffer
-            found = vim.fn.search(pattern, 'c')
-            if found > 0 then
-              break
-            else
-              -- Didn't find in this buffer, restore
-              if pending.action == 'change' or pending.action == 'visual' then
-                -- Close the split we just opened
-                vim.cmd('close')
-              else
-                -- Switch back to original buffer
-                vim.cmd('buffer ' .. start_buf)
-              end
-            end
-          end
-        end
-      end
-
-      if found == 0 then
-        -- Pattern not found anywhere
-        if vim.api.nvim_buf_is_valid(start_buf) then
-          vim.api.nvim_set_current_buf(start_buf)
-        end
-        M.BeamSearchOperatorPending = {}
-        _G.BeamSearchOperatorPending = nil
-        vim.cmd('silent! autocmd! BeamSearchOperatorExecute')
-        vim.g.beam_search_operator_indicator = nil
-        vim.cmd('redrawstatus')
-        return
-      end
-    end
-
-    -- Update saved position to return to the original buffer
-    if start_buf ~= vim.api.nvim_get_current_buf() then
-      -- We found the pattern in a different buffer
-      if
-        pending.action == 'yank'
-        or pending.action == 'delete'
-        or pending.action == 'yankline'
-        or pending.action == 'deleteline'
-      then
-        -- For yank/delete, we need to return to original buffer
-        pending.saved_pos_for_yank = { 0, start_pos[1], start_pos[2], 0 }
-        pending.saved_buf = start_buf
-      else
-        -- For change/visual, clear the saved position so we don't return
-        pending.saved_pos_for_yank = nil
-        pending.saved_buf = nil
-      end
-    end
+    return M.perform_cross_buffer_search(pattern, pending, cfg)
   else
     -- Cross-buffer disabled - only search current buffer
     local found = vim.fn.search(pattern, 'c')
     if found == 0 then
-      -- Pattern not found in current buffer
+      M.cleanup_pending_state()
+    end
+    return found
+  end
+end
+
+---Perform cross-buffer search
+---@param pattern string
+---@param pending table
+---@param cfg table
+---@return number found
+function M.perform_cross_buffer_search(pattern, pending, cfg)
+  local start_buf = vim.api.nvim_get_current_buf()
+  local start_pos = vim.api.nvim_win_get_cursor(0)
+
+  -- Check current buffer first
+  local found = vim.fn.search(pattern, 'c')
+
+  if found == 0 then
+    -- Get visible buffers if needed
+    local visible_buffers = cross_buffer.get_visible_buffers(cfg.cross_buffer.include_hidden)
+
+    -- Search other buffers
+    found = cross_buffer.search_other_buffers(pattern, start_buf, pending, visible_buffers)
+
+    if found == 0 then
+      cross_buffer.handle_not_found(start_buf)
       M.BeamSearchOperatorPending = {}
-      _G.BeamSearchOperatorPending = nil
-      vim.g.beam_search_operator_indicator = nil
-      vim.cmd('redrawstatus')
-      return
+      return 0
     end
   end
 
+  -- Update saved position based on cross-buffer result
+  cross_buffer.update_saved_position(start_buf, start_pos, pending)
+  return found
+end
+
+---Setup operator state
+---@param pattern string
+---@param pending table
+function M.setup_operator_state(pattern, pending)
   vim.g.beam_search_operator_pattern = pattern
   vim.g.beam_search_operator_saved_pos = pending.saved_pos_for_yank
   vim.g.beam_search_operator_saved_buf = pending.saved_buf
@@ -331,7 +256,10 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
 
   M.BeamSearchOperatorPending = {}
   _G.BeamSearchOperatorPending = nil
+end
 
+---Execute the operator
+function M.execute_operator()
   -- Check if we're in test mode (synchronous execution needed)
   if vim.g.beam_test_mode then
     -- Direct call for tests
@@ -346,88 +274,71 @@ M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
   end
 end
 
+---Cleanup pending state
+function M.cleanup_pending_state()
+  M.BeamSearchOperatorPending = {}
+  _G.BeamSearchOperatorPending = nil
+  vim.g.beam_search_operator_indicator = nil
+  vim.cmd('redrawstatus')
+end
+
 function M.create_setup_function(action, save_pos)
   return function(textobj)
-    M.BeamSearchOperatorPending = {
-      action = action,
-      textobj = textobj,
-      saved_pos_for_yank = save_pos and vim.fn.getpos('.') or nil,
-      saved_buf = save_pos and vim.api.nvim_get_current_buf() or nil,
-    }
-
+    M.setup_pending_operation(action, textobj, save_pos)
     vim.g.beam_search_operator_indicator = action .. '[' .. textobj .. ']'
 
-    -- Check if smart highlighting is enabled and text object has constraints
     local cfg = config.current
-    if cfg.smart_highlighting and search_transform.has_constraints(textobj) then
-      -- Get prefix and suffix for the text object
-      local constraint = search_transform.textobj_constraints[textobj]
-      if constraint and constraint.wrap_pattern then
-        -- Extract prefix and suffix from the wrap pattern
-        local test_pattern = constraint.wrap_pattern('TEST')
-        local prefix = test_pattern:match('^(.*)TEST')
-        local suffix = test_pattern:match('TEST(.*)$')
+    local smart_result = smart_search.setup_smart_highlighting(textobj, cfg)
 
-        if prefix and suffix then
-          -- Store suffix for later (use buffer-local to avoid global state)
-          vim.b.beam_smart_suffix = suffix
-
-          -- Start search with prefix
-          vim.defer_fn(function()
-            vim.api.nvim_feedkeys('/' .. prefix, 'n', false)
-          end, 10)
-
-          -- Map Enter to add suffix
-          vim.cmd([[
-            cnoremap <expr> <CR> getcmdtype() == '/' && exists('b:beam_smart_suffix') ? '<End>' . b:beam_smart_suffix . '<CR>' : '<CR>'
-          ]])
-
-          -- Setup autocmd for execution with pattern capture
-          vim.cmd([[
-            silent! augroup! BeamSearchOperatorExecute
-            augroup BeamSearchOperatorExecute
-              autocmd!
-              autocmd CmdlineChanged / lua require('beam.operators').beam_search_pattern_from_cmdline = vim.fn.getcmdline()
-              autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator(); vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus'); vim.cmd('silent! cunmap <CR>'); vim.b.beam_smart_suffix = nil; vim.cmd('silent! autocmd! BeamSearchOperatorExecute CmdlineChanged')
-            augroup END
-          ]])
-
-          vim.cmd('redrawstatus')
-          return '' -- Don't return '/' since we're starting search with feedkeys
-        end
-      end
+    if smart_result ~= nil then
+      vim.cmd('redrawstatus')
+      return smart_result
     end
 
     -- Standard search (no smart highlighting)
-    -- Set up autocmd to capture the pattern as it's typed
-    vim.cmd([[
-      silent! augroup! BeamSearchOperatorExecute
-      augroup BeamSearchOperatorExecute
-        autocmd!
-        autocmd CmdlineChanged / lua require('beam.operators').beam_search_pattern_from_cmdline = vim.fn.getcmdline()
-        autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator(); vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus'); vim.cmd('silent! autocmd! BeamSearchOperatorExecute CmdlineChanged')
-      augroup END
-    ]])
-
+    smart_search.setup_standard_autocmds()
     vim.cmd('redrawstatus')
     return '/'
   end
 end
 
--- Helper to check if multiple buffers are open
-M.has_multiple_buffers = function()
-  local cfg = config.current
+---Setup pending operation state
+---@param action string
+---@param textobj string
+---@param save_pos boolean
+function M.setup_pending_operation(action, textobj, save_pos)
+  M.BeamSearchOperatorPending = {
+    action = action,
+    textobj = textobj,
+    saved_pos_for_yank = save_pos and vim.fn.getpos('.') or nil,
+    saved_buf = save_pos and vim.api.nvim_get_current_buf() or nil,
+  }
+end
 
-  -- If cross_buffer is not enabled, return false
-  if not cfg.cross_buffer or not cfg.cross_buffer.enabled then
+---Check if multiple buffers are open
+---@return boolean
+function M.has_multiple_buffers()
+  local cfg = config.current
+  if not M.is_cross_buffer_enabled(cfg) then
     return false
   end
 
-  local count = 0
   local buffers = vim.fn.getbufinfo({ buflisted = 1 })
+  local visible_buffers = M.get_visible_buffer_set(cfg)
+  return M.count_eligible_buffers(buffers, visible_buffers) > 1
+end
 
-  -- If include_hidden is false, only count visible buffers
-  -- Handle both boolean false and string "false"
+---Check if cross-buffer is enabled
+---@param cfg table
+---@return boolean
+function M.is_cross_buffer_enabled(cfg)
+  return cfg.cross_buffer and cfg.cross_buffer.enabled
+end
+
+---Get set of visible buffers
+---@param cfg table
+---@return table|nil
+function M.get_visible_buffer_set(cfg)
   local include_hidden = cfg.cross_buffer.include_hidden
   if include_hidden == false or include_hidden == 'false' then
     local visible_buffers = {}
@@ -435,28 +346,40 @@ M.has_multiple_buffers = function()
       local bufnr = vim.api.nvim_win_get_buf(win)
       visible_buffers[bufnr] = true
     end
+    return visible_buffers
+  end
+  return nil
+end
 
-    for _, buf in ipairs(buffers) do
-      if vim.api.nvim_buf_is_loaded(buf.bufnr) and visible_buffers[buf.bufnr] then
-        count = count + 1
-        if count > 1 then
-          return true
-        end
-      end
-    end
-  else
-    -- Count all loaded buffers
-    for _, buf in ipairs(buffers) do
-      if vim.api.nvim_buf_is_loaded(buf.bufnr) then
-        count = count + 1
-        if count > 1 then
-          return true
-        end
+---Count eligible buffers
+---@param buffers table
+---@param visible_buffers table|nil
+---@return number
+function M.count_eligible_buffers(buffers, visible_buffers)
+  local count = 0
+  for _, buf in ipairs(buffers) do
+    if M.is_buffer_eligible(buf, visible_buffers) then
+      count = count + 1
+      if count > 1 then
+        return count
       end
     end
   end
+  return count
+end
 
-  return false
+---Check if buffer is eligible
+---@param buf table
+---@param visible_buffers table|nil
+---@return boolean
+function M.is_buffer_eligible(buf, visible_buffers)
+  if not vim.api.nvim_buf_is_loaded(buf.bufnr) then
+    return false
+  end
+  if visible_buffers then
+    return visible_buffers[buf.bufnr] == true
+  end
+  return true
 end
 
 -- Helper to determine if we should use Telescope
