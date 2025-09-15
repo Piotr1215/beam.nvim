@@ -138,42 +138,63 @@ M.line_operators = {
 ---@type BeamConfig
 M.current = {}
 
+---Apply backward compatibility transformations
+---@param opts table User options
+local function apply_backward_compatibility(opts)
+  if not opts then
+    return
+  end
+
+  -- Convert boolean cross_buffer to table format
+  if type(M.current.cross_buffer) == 'boolean' then
+    M.current.cross_buffer = {
+      enabled = M.current.cross_buffer,
+      fuzzy_finder = 'telescope',
+      include_hidden = false,
+    }
+  end
+
+  -- Rename auto_discover_text_objects to auto_discover_custom_text_objects
+  if opts.auto_discover_text_objects ~= nil and opts.auto_discover_custom_text_objects == nil then
+    M.current.auto_discover_custom_text_objects = opts.auto_discover_text_objects
+  end
+end
+
+---Initialize text objects
+local function initialize_text_objects()
+  -- Merge custom text objects into base text_objects
+  if M.current.custom_text_objects then
+    M.text_objects = vim.tbl_extend('force', M.text_objects, M.current.custom_text_objects)
+  end
+
+  -- Initialize active_text_objects with all text objects
+  M.active_text_objects = vim.tbl_deep_extend('force', {}, M.text_objects)
+
+  -- Ensure custom text objects are in active registry
+  if M.current.custom_text_objects then
+    M.active_text_objects =
+      vim.tbl_extend('force', M.active_text_objects, M.current.custom_text_objects)
+  end
+end
+
+---Apply feature compatibility rules
+local function apply_feature_compatibility()
+  -- Disable beam_scope if cross_buffer is enabled (incompatible features)
+  if M.current.cross_buffer and M.current.cross_buffer.enabled then
+    if M.current.beam_scope then
+      M.current.beam_scope.enabled = false
+    end
+  end
+end
+
 ---@param opts? BeamConfig|table User configuration options
 ---@return BeamConfig
 function M.setup(opts)
   M.current = vim.tbl_deep_extend('force', M.defaults, opts or {})
 
-  -- Backward compatibility: convert boolean cross_buffer to table format
-  if type(M.current.cross_buffer) == 'boolean' then
-    M.current.cross_buffer = {
-      enabled = M.current.cross_buffer,
-      fuzzy_finder = 'telescope',
-      include_hidden = false, -- Set default value explicitly
-    }
-  end
-
-  -- Backward compatibility: rename auto_discover_text_objects to auto_discover_custom_text_objects
-  if
-    opts
-    and opts.auto_discover_text_objects ~= nil
-    and opts.auto_discover_custom_text_objects == nil
-  then
-    M.current.auto_discover_custom_text_objects = opts.auto_discover_text_objects
-  end
-
-  if M.current.custom_text_objects then
-    M.text_objects = vim.tbl_extend('force', M.text_objects, M.current.custom_text_objects)
-  end
-
-  -- Initialize active_text_objects
-  -- Only use default text_objects if auto-discovery is disabled
-  if M.current.auto_discover_text_objects then
-    -- Start with empty, will be populated by discovery
-    M.active_text_objects = {}
-  else
-    -- Use defaults when discovery is disabled
-    M.active_text_objects = vim.tbl_deep_extend('force', {}, M.text_objects)
-  end
+  apply_backward_compatibility(opts)
+  initialize_text_objects()
+  apply_feature_compatibility()
 
   return M.current
 end
