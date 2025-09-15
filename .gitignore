@@ -1,7 +1,6 @@
 # Test artifacts
 .tests/
 test/xdg/
-test/nvim-shim
 
 # Logs
 *.log

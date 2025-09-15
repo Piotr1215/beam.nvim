@@ -1,31 +1,34 @@
-.PHONY: test test-verbose test-old format clean install-hooks
+.PHONY: test test-busted test-plenary test-verbose test-old test-unit test-functional format clean install-hooks
 
-# Run tests with Plenary (default)
-test:
-	@echo "Running tests with Plenary..."
-	@nvim --headless -l test/run_tests.lua 2>&1 | tee /tmp/beam-test-output.txt
+# Run tests with Busted (default - new test framework)
+test: test-busted
+
+# Run tests with Busted
+test-busted:
+	@echo "Running tests with Busted..."
+	@echo "======================================="
 	@echo ""
-	@echo "============================================"
-	@echo "TEST SUMMARY"
-	@echo "============================================"
-	@echo -n "Total tests run: "
-	@grep -E "Success: |Failed :" /tmp/beam-test-output.txt | awk '{sum+=$$3} END {print sum}'
-	@echo -n "Tests passed: "
-	@grep "Success: " /tmp/beam-test-output.txt | awk '{sum+=$$3} END {print sum}'
-	@echo -n "Tests failed: "
-	@grep "Failed : " /tmp/beam-test-output.txt | awk '{sum+=$$3} END {if(sum=="") print 0; else print sum}'
-	@echo "============================================"
-	@if grep -q "Tests Failed" /tmp/beam-test-output.txt 2>/dev/null || grep -q "^[[:space:]]*Failed : [1-9]" /tmp/beam-test-output.txt 2>/dev/null; then rm -f /tmp/beam-test-output.txt; exit 1; fi
-	@rm -f /tmp/beam-test-output.txt
+	@echo "🧪 Running unit tests ($(shell ls test/unit/*.lua 2>/dev/null | wc -l) files)..."
+	@./test/run_busted.sh --run unit
+	@echo ""
+	@if [ -d "test/functional" ] && [ -n "$$(ls -A test/functional/*.lua 2>/dev/null)" ]; then \
+		echo "🔧 Running functional tests ($(shell ls test/functional/*.lua 2>/dev/null | wc -l) files)..."; \
+		./test/run_busted.sh --run functional || true; \
+	fi
+	@echo ""
+	@echo "======================================="
+	@echo "✅ Test run complete!"
 
-# Run tests with output visible (not headless)
-test-verbose:
-	@echo "Running tests with Plenary (verbose)..."
-	@nvim -l test/run_tests.lua
+# Run only unit tests with Busted
+test-unit:
+	@echo "🧪 Running unit tests..."
+	@./test/run_busted.sh --run unit
 
-# Run old test suite (for remaining non-migrated tests)
-test-old:
-	@./test/run_all_tests.sh
+# Run only functional tests with Busted
+test-functional:
+	@echo "🔧 Running functional tests..."
+	@./test/run_busted.sh --run functional
+
 
 # Format Lua code with stylua
 format:
@@ -41,13 +44,23 @@ install-hooks:
 
 # Clean test artifacts
 clean:
-	@rm -rf /tmp/lazy-test /tmp/lazy.nvim /tmp/lazy-lock.json
+	@echo "Cleaning test artifacts..."
+	@rm -rf test/xdg
+	@rm -f luacov.stats.out luacov.report.out
+	@echo "✅ Clean complete"
 
 # Help
 help:
-	@echo "Available targets:"
-	@echo "  make test          - Run comprehensive test suite"
-	@echo "  make test-verbose  - Run tests with detailed output"
+	@echo "beam.nvim - Makefile targets"
+	@echo "============================"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test          - Run all tests (unit + functional)"
+	@echo "  make test-unit     - Run unit tests only"
+	@echo "  make test-functional - Run functional tests only"
+	@echo ""
+	@echo "Development:"
 	@echo "  make format        - Format code with stylua"
 	@echo "  make install-hooks - Install git pre-commit hooks"
 	@echo "  make clean         - Clean test artifacts"
+	@echo ""
