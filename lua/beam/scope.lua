@@ -368,12 +368,6 @@ function M.find_text_objects(textobj_key, source_buf)
   return instances
 end
 
--- Create formatted lines for the scope buffer (returns multiple lines per instance)
----Format instance lines for display
----@param instance table Text object instance
----@param index number Instance index
----@param textobj_key string Text object key
----@return table lines Formatted lines
 -- Delimiter mapping for text objects
 local DELIMITER_MAP = {
   ['"'] = { '"', '"' },
@@ -424,9 +418,9 @@ local function format_multiline(preview, left_delim, right_delim)
 end
 
 ---@param instance table Instance to format
----@param index number|nil Index (unused but kept for compatibility)
+---@param _index number|nil Index (unused but kept for compatibility)
 ---@param textobj_key string Text object key
-function M.format_instance_lines(instance, index, textobj_key)
+function M.format_instance_lines(instance, _index, textobj_key)
   -- Try custom format functions first
   local custom_obj = custom_text_objects.get(textobj_key)
   if custom_obj and custom_obj.format then
@@ -513,9 +507,6 @@ function M.create_scope_buffer(instances, textobj_key, source_buf)
 end
 
 -- Update preview by showing the code block in the source buffer
----Update preview highlighting
----@param line_num number Current line number
----@return nil
 ---Find window containing buffer
 ---@param buf number Buffer handle
 ---@return number|nil win Window handle or nil
@@ -573,7 +564,9 @@ local function apply_instance_highlights(source_buf, instance)
   vim.api.nvim_buf_clear_namespace(source_buf, M.scope_state.highlight_ns, 0, -1)
 
   -- Apply new highlights
-  for line = instance.start_line - 1, instance.end_line - 1 do
+  local start_line = (instance.start_line or 1) - 1
+  local end_line = (instance.end_line or 1) - 1
+  for line = start_line, end_line do
     vim.api.nvim_buf_add_highlight(source_buf, M.scope_state.highlight_ns, 'Visual', line, 0, -1)
   end
 end
@@ -586,12 +579,15 @@ function M.update_preview(line_num)
 
   local instance = M.scope_state.node_map[instance_idx]
   local source_buf = M.scope_state.source_buffer
+  if not source_buf then
+    return
+  end
 
   -- Get or create source window
   local source_win = ensure_source_window(source_buf)
 
   -- Jump to instance and center view
-  vim.api.nvim_win_set_cursor(source_win, { instance.start_line, instance.start_col })
+  vim.api.nvim_win_set_cursor(source_win, { instance.start_line, instance.start_col or 0 })
   vim.api.nvim_win_call(source_win, function()
     vim.cmd('normal! zz')
   end)
@@ -742,9 +738,6 @@ local function restore_original_position(saved_win, saved_buf, return_pos)
   vim.fn.setpos('.', return_pos)
 end
 
----Execute operation on selected instance
----@param line_num number Selected line number
----@return nil
 ---Get instance from line number
 ---@param line_num number Line number in scope buffer
 ---@return table|nil instance The instance or nil if not found
@@ -949,7 +942,7 @@ end
 ---@param instances table Array of instances
 ---@param cursor_line number Current cursor line
 ---@param prefer_below boolean Whether to prefer instances below cursor
----@return number best_instance Index of best instance
+---@return number|nil best_instance Index of best instance or nil if not found
 local function find_closest_instance(instances, cursor_line, prefer_below)
   local best_instance = 1
   local min_distance = math.huge
@@ -1106,9 +1099,6 @@ local function is_in_scoped_list(target, list, label)
   return false
 end
 
----Check if BeamScope should be used for a text object
----@param textobj string Text object to check
----@return boolean should_use Whether to use BeamScope
 ---Check if BeamScope is available for use
 ---@return boolean enabled Whether BeamScope can be used
 ---@return string|nil reason Reason why it's not available

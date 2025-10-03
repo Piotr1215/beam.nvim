@@ -1,4 +1,4 @@
-.PHONY: test test-busted test-plenary test-verbose test-old test-unit test-functional format clean install-hooks
+.PHONY: test test-busted test-plenary test-verbose test-old test-unit test-functional format clean install-hooks typecheck
 
 # Run tests with Busted (default - new test framework)
 test: test-busted
@@ -8,31 +8,45 @@ test-busted:
 	@echo "Running tests with Busted..."
 	@echo "======================================="
 	@echo ""
-	@echo "🧪 Running unit tests ($(shell ls test/unit/*.lua 2>/dev/null | wc -l) files)..."
+	@echo "Running unit tests ($(shell ls test/unit/*.lua 2>/dev/null | wc -l) files)..."
 	@./test/run_busted.sh --run unit
 	@echo ""
 	@if [ -d "test/functional" ] && [ -n "$$(ls -A test/functional/*.lua 2>/dev/null)" ]; then \
-		echo "🔧 Running functional tests ($(shell ls test/functional/*.lua 2>/dev/null | wc -l) files)..."; \
+		echo "Running functional tests ($(shell ls test/functional/*.lua 2>/dev/null | wc -l) files)..."; \
 		./test/run_busted.sh --run functional || true; \
 	fi
 	@echo ""
 	@echo "======================================="
-	@echo "✅ Test run complete!"
+	@echo "Test run complete!"
 
 # Run only unit tests with Busted
 test-unit:
-	@echo "🧪 Running unit tests..."
+	@echo "Running unit tests..."
 	@./test/run_busted.sh --run unit
 
 # Run only functional tests with Busted
 test-functional:
-	@echo "🔧 Running functional tests..."
+	@echo "Running functional tests..."
 	@./test/run_busted.sh --run functional
 
 
 # Format Lua code with stylua
 format:
 	@stylua .
+
+# Run type checking with lua-language-server
+typecheck:
+	@echo "Running type checking with lua-language-server..."
+	@if command -v lua-language-server >/dev/null 2>&1; then \
+		lua-language-server --check "lua" --configpath=".luarc.json" --logpath=. --checklevel=Warning; \
+		echo "Type check complete"; \
+	else \
+		echo "ERROR: lua-language-server not found. Install it with:"; \
+		echo "   - Arch: sudo pacman -S lua-language-server"; \
+		echo "   - Ubuntu: sudo apt install lua-language-server"; \
+		echo "   - macOS: brew install lua-language-server"; \
+		exit 1; \
+	fi
 
 # Install git hooks
 install-hooks:
@@ -47,7 +61,7 @@ clean:
 	@echo "Cleaning test artifacts..."
 	@rm -rf test/xdg
 	@rm -f luacov.stats.out luacov.report.out
-	@echo "✅ Clean complete"
+	@echo "Clean complete"
 
 # Help
 help:
@@ -58,6 +72,7 @@ help:
 	@echo "  make test          - Run all tests (unit + functional)"
 	@echo "  make test-unit     - Run unit tests only"
 	@echo "  make test-functional - Run functional tests only"
+	@echo "  make typecheck     - Run type checking with lua-language-server"
 	@echo ""
 	@echo "Development:"
 	@echo "  make format        - Format code with stylua"
