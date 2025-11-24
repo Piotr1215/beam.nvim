@@ -17,9 +17,17 @@ LINK_PATH="${XDG_DATA_HOME}/nvim/site/pack/testing/start/beam.nvim"
 ln -sf "$PROJECT_ROOT" "$LINK_PATH"
 
 # Add project root to Lua path for direct module loading
-# Also include luarocks paths for busted
-export LUA_PATH="${PROJECT_ROOT}/lua/?.lua;${PROJECT_ROOT}/lua/?/init.lua;${HOME}/.luarocks/share/lua/5.1/?.lua;${HOME}/.luarocks/share/lua/5.1/?/init.lua;;"
-export LUA_CPATH="${HOME}/.luarocks/lib/lua/5.1/?.so;;"
+# Include luarocks paths (supports both local ~/.luarocks and system paths)
+LUAROCKS_PATH="${HOME}/.luarocks/share/lua/5.1/?.lua;${HOME}/.luarocks/share/lua/5.1/?/init.lua"
+LUAROCKS_CPATH="${HOME}/.luarocks/lib/lua/5.1/?.so"
+
+# Also check standard luarocks paths (for CI environments)
+if command -v luarocks >/dev/null 2>&1; then
+    eval "$(luarocks path --no-bin 2>/dev/null)" || true
+fi
+
+export LUA_PATH="${PROJECT_ROOT}/lua/?.lua;${PROJECT_ROOT}/lua/?/init.lua;${LUAROCKS_PATH};${LUA_PATH:-;;};"
+export LUA_CPATH="${LUAROCKS_CPATH};${LUA_CPATH:-;;}"
 
 # Run Neovim as Lua interpreter with plugins enabled
 nvim --cmd 'set loadplugins' --cmd "set rtp+=${PROJECT_ROOT}" -l "$@" 2>/dev/null
