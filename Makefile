@@ -11,13 +11,10 @@ test-busted:
 	@echo "Running unit tests ($(shell ls test/unit/*.lua 2>/dev/null | wc -l) files)..."
 	@./test/run_busted.sh --run unit
 	@echo ""
-	@if [ -d "test/functional" ] && [ -n "$$(ls -A test/functional/*.lua 2>/dev/null)" ]; then \
-		echo "Running functional tests ($(shell ls test/functional/*.lua 2>/dev/null | wc -l) files)..."; \
-		./test/run_busted.sh --run functional || true; \
-	fi
-	@echo ""
 	@echo "======================================="
 	@echo "Test run complete!"
+	@echo ""
+	@echo "Note: Functional tests skipped (run 'make test-functional' separately)"
 
 # Run only unit tests with Busted
 test-unit:

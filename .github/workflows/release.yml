@@ -49,16 +49,3 @@ jobs:
           body_path: CHANGELOG.md
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-
-  luarocks-release:
-    needs: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: LuaRocks Upload
-        uses: nvim-neorocks/luarocks-tag-release@v7
-        env:
-          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
-        with:
-          spec_name: "beam.nvim-scm-1.rockspec"

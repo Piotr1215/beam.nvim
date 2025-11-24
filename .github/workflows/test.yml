@@ -16,7 +16,96 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run tests
-        uses: nvim-neorocks/nvim-busted-action@v1
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
         with:
-          nvim_version: ${{ matrix.neovim_version }}
+          neovim: true
+          version: ${{ matrix.neovim_version }}
+
+      - name: Install dependencies
+        run: |
+          mkdir -p ~/.local/share/nvim/site/pack/vendor/start
+          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim ~/.local/share/nvim/site/pack/vendor/start/plenary.nvim
+          git clone --depth 1 https://github.com/nvim-treesitter/nvim-treesitter ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter
+
+      - name: Run tests
+        run: |
+          nvim --headless -c "PlenaryBustedDirectory test/unit/ {minimal_init='test/minimal_init.lua'}" -c "qa!"
+
+  # Test that the plugin installs correctly with lazy.nvim
+  install-test:
+    name: Test lazy.nvim installation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ['ubuntu-latest', 'macos-latest']
+        neovim_version: ['stable', 'nightly']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim_version }}
+
+      - name: Test lazy.nvim installation
+        run: |
+          # Create a test init.lua that installs beam.nvim via lazy.nvim
+          mkdir -p /tmp/nvim-test
+          cat > /tmp/nvim-test/init.lua << 'EOF'
+          -- Bootstrap lazy.nvim
+          local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+          if not vim.loop.fs_stat(lazypath) then
+            vim.fn.system({
+              "git", "clone", "--filter=blob:none",
+              "https://github.com/folke/lazy.nvim.git",
+              "--branch=stable", lazypath,
+            })
+          end
+          vim.opt.rtp:prepend(lazypath)
+
+          -- Install beam.nvim from local checkout
+          require("lazy").setup({
+            { dir = vim.env.BEAM_PATH, config = function() require("beam").setup() end },
+          }, {
+            lockfile = "/tmp/lazy-lock.json",
+          })
+
+          -- Verify installation
+          vim.defer_fn(function()
+            local ok, beam = pcall(require, "beam")
+            if not ok then
+              print("FAIL: Could not require beam module")
+              vim.cmd("cq 1")
+            end
+
+            if not vim.g.loaded_beam then
+              print("FAIL: vim.g.loaded_beam is not set")
+              vim.cmd("cq 1")
+            end
+
+            -- Check that mappings were created
+            local mappings = vim.api.nvim_get_keymap("n")
+            local has_beam_mapping = false
+            for _, map in ipairs(mappings) do
+              if map.lhs and map.lhs:match("^,y") then
+                has_beam_mapping = true
+                break
+              end
+            end
+
+            if not has_beam_mapping then
+              print("FAIL: No beam mappings found")
+              vim.cmd("cq 1")
+            end
+
+            print("SUCCESS: beam.nvim installed and configured correctly")
+            vim.cmd("qa!")
+          end, 1000)
+          EOF
+
+          # Run the test
+          BEAM_PATH="${GITHUB_WORKSPACE}" XDG_CONFIG_HOME=/tmp/nvim-test XDG_DATA_HOME=/tmp/nvim-data \
+            nvim --headless -u /tmp/nvim-test/init.lua
