@@ -61,8 +61,8 @@ QUICK EXAMPLES                            *beam.nvim-beam.nvim-quick-examples*
 <
 
 
-  [!NOTE] **BeamScope in action**This screenshot shows BeamScope’s visual text
-  object selection interface. When you trigger an operation like `,ci"`,
+  [!NOTE] **BeamScope in action**: This screenshot shows BeamScope’s visual
+  text object selection interface. When you trigger an operation like `,ci"`,
   BeamScope displays all available quote pairs in a side window, starting from
   your cursor position. You can navigate with `j`/`k`, filter with `/`, and
   select with `Enter` - making it easy to target exactly the text object you want
@@ -164,8 +164,8 @@ HOW IT WORKS ~
 
 WHEN BEAMSCOPE VS SEARCH ACTIVATES ~
 
-- **BeamScope**Automatically activates for scoped text objects (quotes, brackets, tags) when multiple instances exist in the buffer. Shows all instances in a side window for visual selection.
-- **Regular Search**Used for all other text objects (words, paragraphs, sentences) or when BeamScope is disabled. Uses Vim’s native `/` search with incremental highlighting.
+- **BeamScope**: Automatically activates for scoped text objects (quotes, brackets, tags) when multiple instances exist in the buffer. Shows all instances in a side window for visual selection.
+- **Regular Search**: Used for all other text objects (words, paragraphs, sentences) or when BeamScope is disabled. Uses Vim’s native `/` search with incremental highlighting.
 
 
 COMMON OPERATIONS ~
@@ -212,22 +212,22 @@ While searching: - `Ctrl-G` - Next match - `Ctrl-T` - Previous match - `Enter`
 
 SUPPORTED TEXT OBJECTS ~
 
-beam.nvim works with ALL |Vim/Neovim text objects| -**Basic**`iw`/`aw` (word),
-`is`/`as` (sentence), `ip`/`ap` (paragraph) - **Quotes**`i"`/`a"`, `i'`/`a'`,
-`i``/`a`` - **Brackets**`i(`/`a(`, `i[`/`a[`, `i{`/`a{`, `i<`/`a<` -
-**Tags**`it`/`at` (HTML/XML) - **Line operators** `Y`,`D`, `C`, `V` for entire
-lines
+beam.nvim works with ALL |Vim/Neovim text objects|: - **Basic**: `iw`/`aw`
+(word), `is`/`as` (sentence), `ip`/`ap` (paragraph) - **Quotes**: `i"`/`a"`,
+`i'`/`a'`, `i``/`a`` - **Brackets**: `i(`/`a(`, `i[`/`a[`, `i{`/`a{`, `i<`/`a<`
+- **Tags**: `it`/`at` (HTML/XML) - **Line operators**: `Y`, `D`, `C`, `V` for
+entire lines
 
 
   [!TIP] Run `:BeamShowTextObjects` to see all available text objects including
   those from other plugins.
 With auto-discovery enabled, beam automatically integrates text objects from
 When `auto_discover_text_objects = true`, beam automatically finds and uses
-text objects from: - **treesitter-textobjects**`if` (function), `ic` (class),
-`il` (loop), etc. - mini.ai <https://github.com/echasnovski/mini.ai>Custom text
-objects you’ve defined - **nvim-various-textobjs**`ii` (indentation), `R`
-(rest of line), etc. - **targets.vim**Seek-able text objects with next/last
-variants - Any other plugin that defines text objects!
+text objects from: - **treesitter-textobjects**: `if` (function), `ic` (class),
+`il` (loop), etc. - mini.ai <https://github.com/echasnovski/mini.ai>: Custom
+text objects you’ve defined - **nvim-various-textobjs**: `ii` (indentation),
+`R` (rest of line), etc. - **targets.vim**: Seek-able text objects with
+next/last variants - Any other plugin that defines text objects!
 
 
 COMMANDS ~
@@ -246,7 +246,8 @@ PRACTICAL SETUP ~
 >lua
     -- Most users will want something like this:
     require('beam').setup({
-      prefix = ',',                      -- Your prefix key
+      prefix = ',',                      -- Your prefix key (forward search with /)
+      backward_prefix = ';',             -- Optional: backward search with ?
       beam_scope = { enabled = true },   -- Visual selection for quotes/brackets
       auto_discover_custom_text_objects = true, -- Use text objects from other plugins
     })
@@ -288,16 +289,16 @@ with `/` - Select with `Enter` - Cancel with `Esc` or `q`
 SMART CURSOR POSITIONING
 
 BeamScope intelligently positions the buffer view based on your cursor
-location: - **Primary behavior**Shows the text object instance at or just below
-your cursor position - **Fallback**If no instances exist below the cursor,
-shows the nearest one above - **Benefit**No need to scroll through the entire
-buffer - BeamScope starts right where you’re working
+location: - **Primary behavior**: Shows the text object instance at or just
+below your cursor position - **Fallback**: If no instances exist below the
+cursor, shows the nearest one above - **Benefit**: No need to scroll through
+the entire buffer - BeamScope starts right where you’re working
 
 This means when you trigger BeamScope, you immediately see the most relevant
 text objects near your current position, making selection faster and more
 intuitive.
 
-**Note**BeamScope is incompatible with cross-buffer operations. When
+**Note**: BeamScope is incompatible with cross-buffer operations. When
 `cross_buffer.enabled = true`, BeamScope is automatically disabled.
 
 
@@ -329,8 +330,9 @@ Full configuration options ~
 >lua
     require('beam').setup({
       -- Core settings
-      prefix = ',',                      -- Prefix for all mappings
-      
+      prefix = ',',                      -- Prefix for all mappings (forward search)
+      backward_prefix = nil,             -- Optional prefix for backward search (e.g., ';')
+    
       -- Visual feedback
       visual_feedback_duration = 150,    -- Duration to show selection before operation
       clear_highlight = true,            -- Clear search highlight after operation
