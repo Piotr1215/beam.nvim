@@ -81,15 +81,16 @@ function M.setup_smart_autocmds()
   ]])
 end
 
----Setup standard search autocmds
+---Setup standard search autocmds (listens to both / and ? for forward/backward search)
 function M.setup_standard_autocmds()
   vim.cmd([[
     silent! augroup! BeamSearchOperatorExecute
     augroup BeamSearchOperatorExecute
       autocmd!
-      autocmd CmdlineChanged / lua require('beam.operators').beam_search_pattern_from_cmdline =
+      autocmd CmdlineChanged /,\? lua require('beam.operators').beam_search_pattern_from_cmdline =
         \ vim.fn.getcmdline()
-      autocmd CmdlineLeave / ++once lua require('beam.operators').BeamExecuteSearchOperator();
+      autocmd CmdlineLeave /,\? ++once lua require('beam.operators').beam_search_direction =
+        \ vim.fn.getcmdtype(); require('beam.operators').BeamExecuteSearchOperator();
         \ vim.g.beam_search_operator_indicator = nil; vim.cmd('redrawstatus');
         \ vim.cmd('silent! autocmd! BeamSearchOperatorExecute CmdlineChanged')
     augroup END

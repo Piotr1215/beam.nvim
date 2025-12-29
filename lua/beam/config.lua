@@ -37,6 +37,7 @@ local M = {}
 ---@type BeamConfig
 M.defaults = {
   prefix = ',',
+  backward_prefix = nil, -- Set to e.g. ';' to enable backward search mappings
   visual_feedback_duration = 150,
   clear_highlight = true,
   clear_highlight_delay = 500,

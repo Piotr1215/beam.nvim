@@ -195,7 +195,8 @@ When `auto_discover_text_objects = true`, beam automatically finds and uses text
 ```lua
 -- Most users will want something like this:
 require('beam').setup({
-  prefix = ',',                      -- Your prefix key
+  prefix = ',',                      -- Your prefix key (forward search with /)
+  backward_prefix = ';',             -- Optional: backward search with ?
   beam_scope = { enabled = true },   -- Visual selection for quotes/brackets
   auto_discover_custom_text_objects = true, -- Use text objects from other plugins
 })
@@ -269,8 +270,9 @@ vim.opt.statusline:append('%{get(g:,"beam_search_operator_indicator","")}')
 ```lua
 require('beam').setup({
   -- Core settings
-  prefix = ',',                      -- Prefix for all mappings
-  
+  prefix = ',',                      -- Prefix for all mappings (forward search)
+  backward_prefix = nil,             -- Optional prefix for backward search (e.g., ';')
+
   -- Visual feedback
   visual_feedback_duration = 150,    -- Duration to show selection before operation
   clear_highlight = true,            -- Clear search highlight after operation

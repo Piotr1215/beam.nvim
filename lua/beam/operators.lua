@@ -152,6 +152,9 @@ end
 M.BeamSearchOperatorPending = {}
 _G.BeamSearchOperatorPending = nil
 
+-- Search direction: '/' for forward, '?' for backward
+M.beam_search_direction = '/'
+
 ---Execute the search operator after search pattern is entered
 ---@return nil
 M.BeamExecuteSearchOperator = function()
@@ -205,7 +208,9 @@ function M.perform_search(pattern, pending, cfg)
     return M.perform_cross_buffer_search(pattern, pending, cfg)
   else
     -- Cross-buffer disabled - only search current buffer
-    local found = vim.fn.search(pattern, 'c')
+    -- Use 'bc' flags for backward search, 'c' for forward
+    local flags = M.beam_search_direction == '?' and 'bc' or 'c'
+    local found = vim.fn.search(pattern, flags)
     if found == 0 then
       M.cleanup_pending_state()
     end
@@ -278,6 +283,7 @@ end
 function M.cleanup_pending_state()
   M.BeamSearchOperatorPending = {}
   _G.BeamSearchOperatorPending = nil
+  M.beam_search_direction = '/' -- Reset to forward
   vim.g.beam_search_operator_indicator = nil
   vim.cmd('redrawstatus')
 end
