@@ -12,7 +12,10 @@
       "${3rd}/luv/library",
       "${3rd}/busted/library"
     ],
-    "checkThirdParty": false
+    "checkThirdParty": false,
+    "ignoreDir": [
+      ".tests"
+    ]
   },
   "diagnostics": {
     "globals": [
