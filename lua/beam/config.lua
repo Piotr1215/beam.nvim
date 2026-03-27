@@ -19,6 +19,7 @@ local M = {}
 
 ---@class BeamConfig
 ---@field prefix string Prefix for all mappings
+---@field backward_prefix string|nil Optional prefix for backward search mappings
 ---@field visual_feedback_duration number Duration of visual feedback in milliseconds
 ---@field clear_highlight boolean Clear search highlight after operation
 ---@field clear_highlight_delay number Delay before clearing highlight in milliseconds

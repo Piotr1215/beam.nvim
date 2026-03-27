@@ -24,7 +24,7 @@ end
 ---@param op_key string Operator key
 ---@param op_info table Operator info
 ---@param search_char string Search character ('/' or '?')
----@param direction_suffix string Suffix for description ('forward' or 'backward')
+---@param direction_suffix? string Suffix for description ('forward' or 'backward')
 local function setup_text_object_mappings(prefix, op_key, op_info, search_char, direction_suffix)
   search_char = search_char or '/'
   direction_suffix = direction_suffix or ''
@@ -50,7 +50,7 @@ end
 ---@param op_key string Operator key
 ---@param op_info table Operator info
 ---@param search_char string Search character ('/' or '?')
----@param direction_suffix string Suffix for description
+---@param direction_suffix? string Suffix for description
 local function setup_motion_mappings(prefix, op_key, op_info, search_char, direction_suffix)
   search_char = search_char or '/'
   direction_suffix = direction_suffix or ''
@@ -66,7 +66,7 @@ end
 ---Setup line operator mappings
 ---@param prefix string Prefix for mappings
 ---@param search_char string Search character ('/' or '?')
----@param direction_suffix string Suffix for description
+---@param direction_suffix? string Suffix for description
 local function setup_line_operators(prefix, search_char, direction_suffix)
   search_char = search_char or '/'
   direction_suffix = direction_suffix or ''
