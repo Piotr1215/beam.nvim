@@ -1,4 +1,5 @@
 *beam.nvim.txt*     Navigate and perform text operations at the speed of light
+                              For Neovim >= 0.9.0    Last change: 2026 July 25
 
 ==============================================================================
 Table of Contents                                *beam.nvim-table-of-contents*
@@ -100,6 +101,39 @@ MINIMAL SETUP (WITHOUT CROSS-BUFFER SEARCH)
       end,
     }
 <
+
+
+USING VIM.PACK (BUILT-IN, NEOVIM 0.12+) ~
+
+Neovim 0.12 ships its own plugin manager. See `:help vim.pack`.
+
+
+FULL SETUP (WITH TELESCOPE FOR CROSS-BUFFER SEARCH)
+
+>lua
+    vim.pack.add({
+      { src = "https://github.com/nvim-lua/plenary.nvim" },      -- Required by telescope
+      { src = "https://github.com/nvim-telescope/telescope.nvim" },
+      { src = "https://github.com/Piotr1215/beam.nvim" },
+    })
+    
+    require("beam").setup()  -- Uses default prefix ','
+<
+
+
+MINIMAL SETUP (WITHOUT CROSS-BUFFER SEARCH)
+
+>lua
+    vim.pack.add({
+      { src = "https://github.com/Piotr1215/beam.nvim" },
+    })
+    
+    require("beam").setup()  -- Single buffer operations only
+<
+
+`vim.pack` has no `config` hook, so call `require("beam").setup()` yourself
+after `add()`. To pin a branch, tag, or commit, add `version = "v1.0.0"` to the
+spec. Update installed plugins with `:lua vim.pack.update()`.
 
 
 USING PACKER.NVIM ~
