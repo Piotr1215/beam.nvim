@@ -80,6 +80,32 @@ Or easier if you know that next object to change is right below.
 }
 ```
 
+### Using `vim.pack` (built-in, Neovim 0.12+)
+
+Neovim 0.12 ships its own plugin manager. See `:help vim.pack`.
+
+#### Full setup (with Telescope for cross-buffer search)
+```lua
+vim.pack.add({
+  { src = "https://github.com/nvim-lua/plenary.nvim" },      -- Required by telescope
+  { src = "https://github.com/nvim-telescope/telescope.nvim" },
+  { src = "https://github.com/Piotr1215/beam.nvim" },
+})
+
+require("beam").setup()  -- Uses default prefix ','
+```
+
+#### Minimal setup (without cross-buffer search)
+```lua
+vim.pack.add({
+  { src = "https://github.com/Piotr1215/beam.nvim" },
+})
+
+require("beam").setup()  -- Single buffer operations only
+```
+
+`vim.pack` has no `config` hook, so call `require("beam").setup()` yourself after `add()`. To pin a branch, tag, or commit, add `version = "v1.0.0"` to the spec. Update installed plugins with `:lua vim.pack.update()`.
+
 ### Using [packer.nvim](https://github.com/wbthomason/packer.nvim)
 
 ```lua
