@@ -131,6 +131,12 @@ local function validate_ranges(cfg)
     return false, 'beam.config.prefix: must be a single character'
   end
 
+  if cfg.multi_key ~= nil and cfg.multi_key ~= false then
+    if type(cfg.multi_key) ~= 'string' or #cfg.multi_key ~= 1 then
+      return false, 'beam.config.multi_key: must be a single character or false'
+    end
+  end
+
   if cfg.visual_feedback_duration < 0 or cfg.visual_feedback_duration > 1000 then
     return false, 'beam.config.visual_feedback_duration: must be between 0 and 1000'
   end
@@ -213,6 +219,7 @@ function M.get_known_fields()
   return {
     root = {
       prefix = true,
+      multi_key = true,
       visual_feedback_duration = true,
       clear_highlight = true,
       clear_highlight_delay = true,

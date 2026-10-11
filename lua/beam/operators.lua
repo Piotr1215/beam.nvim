@@ -5,6 +5,7 @@ local operation_strategies = require('beam.operation_strategies')
 local constants = require('beam.constants')
 local cross_buffer = require('beam.cross_buffer_search')
 local smart_search = require('beam.smart_search')
+local multicursor = require('beam.multicursor')
 
 ---Execute the beam search operator
 ---@param type string The motion type (unused but required by operatorfunc)
@@ -12,6 +13,12 @@ local smart_search = require('beam.smart_search')
 M.BeamSearchOperator = function(type)
   local context = M.get_operator_context()
   if not M.validate_operator_context(context) then
+    return
+  end
+
+  if context.multi then
+    multicursor.run(context)
+    M.cleanup_search_operator_state()
     return
   end
 
@@ -30,6 +37,7 @@ function M.get_operator_context()
     saved_buf = vim.g.beam_search_operator_saved_buf,
     textobj = vim.g.beam_search_operator_textobj,
     action = vim.g.beam_search_operator_action,
+    multi = vim.g.beam_search_operator_multi,
   }
 end
 
@@ -147,6 +155,7 @@ function M.cleanup_search_operator_state()
   vim.g.beam_search_operator_saved_pos = nil
   vim.g.beam_search_operator_textobj = nil
   vim.g.beam_search_operator_action = nil
+  vim.g.beam_search_operator_multi = nil
 end
 
 M.BeamSearchOperatorPending = {}
@@ -187,6 +196,17 @@ end
 
 M.BeamExecuteSearchOperatorImpl = function(pattern, pending)
   local cfg = config.current
+
+  -- Every match at once: only check one exists, multicursor places the rest
+  if pending.multi then
+    if vim.fn.search(pattern, 'nw') == 0 then
+      M.cleanup_pending_state()
+      return
+    end
+    M.setup_operator_state(pattern, pending)
+    M.execute_operator()
+    return
+  end
   local found = M.perform_search(pattern, pending, cfg)
 
   if found == 0 then
@@ -258,6 +278,7 @@ function M.setup_operator_state(pattern, pending)
   vim.g.beam_search_operator_saved_buf = pending.saved_buf
   vim.g.beam_search_operator_textobj = pending.textobj
   vim.g.beam_search_operator_action = pending.action
+  vim.g.beam_search_operator_multi = pending.multi
 
   M.BeamSearchOperatorPending = {}
   _G.BeamSearchOperatorPending = nil
@@ -319,6 +340,26 @@ function M.setup_pending_operation(action, textobj, save_pos)
     saved_pos_for_yank = save_pos and vim.fn.getpos('.') or nil,
     saved_buf = save_pos and vim.api.nvim_get_current_buf() or nil,
   }
+end
+
+---Setup an operation on every search match, or on every BeamScope instance
+---for scoped text objects (multicursor, `:help zq`)
+---@param action string Action name ('yank', 'delete', 'change', 'visual' or a line action)
+---@param textobj string Text object or motion ('' for line actions)
+---@return string Returns '/' to trigger search mode, '' when smart search starts it
+function M.BeamMultiSearchSetup(action, textobj)
+  -- Scoped objects list their instances; the list's search picks which ones,
+  -- so the prompt opens with the list
+  local scope = require('beam.scope')
+  if textobj ~= '' and scope.should_use_scope(textobj) then
+    return scope.beam_scope(action, textobj, { multi = true }) and '/' or ''
+  end
+
+  local result = M.create_setup_function(action, true)(textobj)
+  M.BeamSearchOperatorPending.multi = true
+  vim.g.beam_search_operator_indicator = action .. '*[' .. textobj .. ']'
+  vim.cmd('redrawstatus')
+  return result
 end
 
 ---Check if multiple buffers are open

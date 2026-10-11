@@ -56,6 +56,7 @@
 
 ---@class BeamInternalConfig
 ---@field prefix string
+---@field multi_key string|false|nil
 ---@field visual_feedback_duration number
 ---@field clear_highlight boolean
 ---@field clear_highlight_delay number
