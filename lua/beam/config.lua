@@ -20,6 +20,7 @@ local M = {}
 ---@class BeamConfig
 ---@field prefix string Prefix for all mappings
 ---@field backward_prefix string|nil Optional prefix for backward search mappings
+---@field multi_key string|false Key after the prefix for every-match operations (needs `zq`, Neovim 0.13+)
 ---@field visual_feedback_duration number Duration of visual feedback in milliseconds
 ---@field clear_highlight boolean Clear search highlight after operation
 ---@field clear_highlight_delay number Delay before clearing highlight in milliseconds
@@ -39,6 +40,7 @@ local M = {}
 M.defaults = {
   prefix = ',',
   backward_prefix = nil, -- Set to e.g. ';' to enable backward search mappings
+  multi_key = 'q', -- <prefix>q<op><textobj> acts on every match via multicursor (Neovim with zq); false disables
   visual_feedback_duration = 150,
   clear_highlight = true,
   clear_highlight_delay = 500,

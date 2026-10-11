@@ -17,6 +17,7 @@ M.scope_state = {
   saved_pos = nil,
   saved_buf = nil,
   saved_win = nil,
+  multi = false,
 }
 
 -- Cleanup function
@@ -52,6 +53,7 @@ function M.cleanup_scope()
     saved_pos = nil,
     saved_buf = nil,
     saved_win = nil,
+    multi = false,
   }
 end
 
@@ -815,6 +817,139 @@ function M.execute_operation(line_num)
   end
 end
 
+---Add \C when 'smartcase' would make a typed search case sensitive
+---@param pattern string
+---@return string
+local function with_smartcase(pattern)
+  local unescaped = pattern:gsub('\\.', '')
+  if vim.o.ignorecase and vim.o.smartcase and unescaped:find('%u') then
+    return '\\C' .. pattern
+  end
+  return pattern
+end
+
+---Whether instance a encloses instance b
+---@param a table
+---@param b table
+---@return boolean
+local function encloses(a, b)
+  local starts_before = a.start_line < b.start_line
+    or (a.start_line == b.start_line and a.start_col <= b.start_col)
+  local ends_after = a.end_line > b.end_line
+    or (a.end_line == b.end_line and a.end_col >= b.end_col)
+  return starts_before and ends_after
+end
+
+---Full text of an instance: its contents, or its list rows when it has none.
+---The list shows only the first line of multi-line contents.
+---@param instance table
+---@param index integer
+---@param line_to_instance table<integer, integer>
+---@param scope_buf integer
+---@return string
+local function instance_text(instance, index, line_to_instance, scope_buf)
+  if instance.preview then
+    return instance.preview
+  end
+  local rows = {}
+  for lnum, idx in pairs(line_to_instance) do
+    if idx == index then
+      table.insert(rows, lnum)
+    end
+  end
+  table.sort(rows)
+  local text = {}
+  for _, lnum in ipairs(rows) do
+    table.insert(text, vim.api.nvim_buf_get_lines(scope_buf, lnum - 1, lnum, false)[1] or '')
+  end
+  return table.concat(text, '\n')
+end
+
+---Pick the instances for an every-match operation: all of them, or those whose
+---contents match the pattern. When chosen instances nest, only the innermost
+---is kept: the outer one contains the inner text too, and editing both would
+---overlap.
+---@param instances table[] Instances in list order
+---@param line_to_instance table<integer, integer> Scope buffer line to instance index
+---@param scope_buf integer Scope buffer
+---@param pattern string|nil Search typed in the scope buffer
+---@return table[] chosen
+function M.select_instances(instances, line_to_instance, scope_buf, pattern)
+  local chosen = {}
+  if pattern and pattern ~= '' then
+    local pat = with_smartcase(pattern)
+    for i, inst in ipairs(instances) do
+      local text = instance_text(inst, i, line_to_instance, scope_buf)
+      local ok, at = pcall(vim.fn.match, text, pat)
+      if ok and at >= 0 then
+        chosen[i] = true
+      end
+    end
+  else
+    for i = 1, #instances do
+      chosen[i] = true
+    end
+  end
+
+  local kept = {}
+  for i, inst in ipairs(instances) do
+    if chosen[i] then
+      local has_inner = false
+      for j, other in ipairs(instances) do
+        if j ~= i and chosen[j] and encloses(inst, other) and not encloses(other, inst) then
+          has_inner = true
+          break
+        end
+      end
+      if not has_inner then
+        table.insert(kept, inst)
+      end
+    end
+  end
+  return kept
+end
+
+---Run the operation at every chosen instance through native multicursor
+---@param pattern string|nil Search typed in the scope buffer; nil for all instances
+function M.execute_multi(pattern)
+  local state = prepare_operation_state()
+  if not state then
+    return
+  end
+  local chosen = M.select_instances(
+    M.scope_state.node_map,
+    M.scope_state.line_to_instance,
+    M.scope_state.buffer,
+    pattern
+  )
+
+  M.cleanup_scope()
+  if state.saved_win and vim.api.nvim_win_is_valid(state.saved_win) then
+    vim.api.nvim_set_current_win(state.saved_win)
+  end
+  if vim.api.nvim_get_current_buf() ~= state.source_buf then
+    vim.api.nvim_set_current_buf(state.source_buf)
+  end
+
+  if #chosen == 0 then
+    vim.notify('No ' .. state.textobj .. ' matches ' .. (pattern or ''), vim.log.levels.WARN)
+    if state.saved_pos then
+      vim.fn.setpos('.', state.saved_pos)
+    end
+    return
+  end
+
+  local positions = {}
+  for _, inst in ipairs(chosen) do
+    table.insert(positions, { inst.start_line, inst.start_col })
+  end
+  require('beam.multicursor').run_at(positions, {
+    action = state.action,
+    textobj = state.textobj,
+    saved_pos = state.saved_pos,
+  })
+end
+
 ---Create navigation function for jumping between instances
 ---@param scope_buf number Scope buffer handle
 ---@return function Navigation function
@@ -862,6 +997,10 @@ local function setup_scope_keymaps(scope_buf, jump_to_next_instance)
   -- Enter key for selection
   vim.api.nvim_buf_set_keymap(scope_buf, 'n', '<CR>', '', {
     callback = function()
+      if M.scope_state.multi then
+        M.execute_multi(nil)
+        return
+      end
       local line = vim.api.nvim_win_get_cursor(0)[1]
       M.execute_operation(line)
     end,
@@ -927,8 +1066,13 @@ local function setup_search_handling(scope_buf, augroup)
     callback = function()
       if execute_on_search then
         execute_on_search = false
+        local pattern = vim.fn.getcmdline()
         vim.defer_fn(function()
           if vim.api.nvim_get_current_buf() == scope_buf then
+            if M.scope_state.multi then
+              M.execute_multi(pattern)
+              return
+            end
             local line = vim.api.nvim_win_get_cursor(0)[1]
             M.execute_operation(line)
           end
@@ -990,8 +1134,9 @@ end
 ---Main BeamScope function
 ---@param action string Action to perform
 ---@param textobj string Text object to select
+---@param opts? {multi?: boolean} multi: act on every chosen instance at once
 ---@return boolean success Whether BeamScope was activated
-function M.beam_scope(action, textobj)
+function M.beam_scope(action, textobj, opts)
   local source_buf = vim.api.nvim_get_current_buf()
   local saved_pos = vim.fn.getpos('.')
   local saved_win = vim.api.nvim_get_current_win() -- Save the original window
@@ -1020,6 +1165,7 @@ function M.beam_scope(action, textobj)
   M.scope_state.saved_pos = saved_pos
   M.scope_state.saved_buf = source_buf
   M.scope_state.saved_win = saved_win -- Store the original window
+  M.scope_state.multi = opts and opts.multi or false
 
   -- Create the scope buffer
   local scope_buf = M.create_scope_buffer(instances, textobj_key, source_buf)

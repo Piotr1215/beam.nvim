@@ -185,6 +185,26 @@ While searching:
 - `Enter` - Execute
 - `Esc` - Cancel
 
+### Every Match (Neovim 0.13+)
+
+On Neovim builds with the native multicursor operator (`:help zq`), beam adds a second set of mappings under `<prefix>q` that act on many targets at once instead of one.
+
+Brackets, quotes and tags open the same BeamScope list as `,ci(`. Type `/pattern<CR>` in the list to act on every instance whose contents match, or `<CR>` to act on all of them. When nested instances both qualify, the inner one wins. Other text objects, motions and line operators take a search and act at every match.
+
+| Keys | Action |
+|------|--------|
+| `,qci(` then `/here<CR>` | Change inside every `()` whose contents match `here`; typing appears in each |
+| `,qyi"` then `<CR>` | Yank every quoted string; the yanks are joined linewise |
+| `,qdiw` then `error<CR>` | Delete the word at every match of `error` |
+| `,qD` then `^log<CR>` | Delete every line that starts with `log` |
+| `,qvi"` then `<CR>` | Select inside every pair of quotes, then use any operator |
+
+Yank and delete end the multicursor session and return to where you started. Change and visual leave the cursors in place; press `<C-L>` to clear them when done.
+
+beam detects `zq` at startup and creates these mappings only when it works. Set `multi_key = false` to turn them off, or another single key to move them.
+
+Neovim's own text objects (`iw`, `i"`, `i(` and the rest) always run as built in, even when a plugin such as mini.ai remaps them, because those plugin mappings do not replay per cursor. Text objects that exist only in a plugin may not work at every cursor.
+
 ### Supported Text Objects
 
 beam.nvim works with ALL [Vim/Neovim text objects](https://neovim.io/doc/user/vimindex.html#_2.1-text-objects):
@@ -298,6 +318,7 @@ require('beam').setup({
   -- Core settings
   prefix = ',',                      -- Prefix for all mappings (forward search)
   backward_prefix = nil,             -- Optional prefix for backward search (e.g., ';')
+  multi_key = 'q',                   -- <prefix>q<op><textobj> acts on every match (Neovim with zq); false disables
 
   -- Visual feedback
   visual_feedback_duration = 150,    -- Duration to show selection before operation

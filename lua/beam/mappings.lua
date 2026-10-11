@@ -94,6 +94,83 @@ local function setup_line_operators(prefix, search_char, direction_suffix)
   end
 end
 
+---Action name per operator key, for multicursor mappings
+---@type table<string, string>
+local multi_actions = { y = 'yank', d = 'delete', c = 'change', v = 'visual' }
+
+---Get the multicursor mapping prefix ('<prefix><multi_key>'), or nil when it is
+---disabled or this Neovim has no `zq`
+---@return string|nil
+local function multi_prefix()
+  local cfg = config.current
+  if not cfg.multi_key or cfg.multi_key == '' then
+    return nil
+  end
+  if not require('beam.multicursor').available() then
+    return nil
+  end
+  return (cfg.prefix or ',') .. cfg.multi_key
+end
+
+---Create a keymap that runs an action at every search match
+---@param key string
+---@param desc string
+---@param action string
+---@param textobj string
+local function create_multi_keymap(key, desc, action, textobj)
+  vim.keymap.set('n', key, function()
+    if operators.BeamMultiSearchSetup(action, textobj) == '/' then
+      vim.api.nvim_feedkeys('/', 'n', false)
+    end
+  end, { desc = desc })
+end
+
+---Setup multicursor mappings for text objects
+---@param p string Multicursor prefix
+---@param text_objects table<string, string|table>
+local function setup_multi_text_object_mappings(p, text_objects)
+  for obj_key, obj_name in pairs(text_objects) do
+    local obj_desc = type(obj_name) == 'table' and (obj_name.desc or obj_key) or obj_name
+    for op_key, op_info in pairs(config.operators) do
+      create_multi_keymap(
+        p .. op_key .. 'i' .. obj_key,
+        'Search & ' .. op_info.verb .. ' inside ' .. obj_desc .. ' at every match',
+        multi_actions[op_key],
+        'i' .. obj_key
+      )
+      create_multi_keymap(
+        p .. op_key .. 'a' .. obj_key,
+        'Search & ' .. op_info.verb .. ' around ' .. obj_desc .. ' at every match',
+        multi_actions[op_key],
+        'a' .. obj_key
+      )
+    end
+  end
+end
+
+---Setup multicursor mappings for motions and line operators
+---@param p string Multicursor prefix
+local function setup_multi_motion_and_line_mappings(p)
+  for op_key, op_info in pairs(config.operators) do
+    for motion_key, motion_desc in pairs(config.motions or {}) do
+      create_multi_keymap(
+        p .. op_key .. motion_key,
+        'Search & ' .. op_info.verb .. ' ' .. motion_desc .. ' at every match',
+        multi_actions[op_key],
+        motion_key
+      )
+    end
+  end
+  for op_key, op_info in pairs(config.line_operators) do
+    create_multi_keymap(
+      p .. op_key,
+      'Search & ' .. op_info.verb .. ' at every match',
+      op_info.action,
+      ''
+    )
+  end
+end
+
 ---Setup all beam mappings based on configuration
 ---@return nil
 function M.setup()
@@ -115,6 +192,13 @@ function M.setup()
       setup_motion_mappings(backward_prefix, op_key, op_info, '?', 'backward')
     end
     setup_line_operators(backward_prefix, '?', 'backward')
+  end
+
+  -- Setup multicursor mappings when this Neovim has zq
+  local mp = multi_prefix()
+  if mp then
+    setup_multi_text_object_mappings(mp, config.active_text_objects)
+    setup_multi_motion_and_line_mappings(mp)
   end
 end
 
@@ -161,6 +245,12 @@ function M.create_custom_mappings(text_objects)
   -- Create backward mappings if configured
   if backward_prefix then
     create_for_prefix(backward_prefix, '?', 'backward')
+  end
+
+  -- Create multicursor mappings when this Neovim has zq
+  local mp = multi_prefix()
+  if mp then
+    setup_multi_text_object_mappings(mp, text_objects)
   end
 end
 
