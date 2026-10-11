@@ -37,7 +37,9 @@ end
 ---@param feedback_duration number
 ---@return boolean success
 local function change_strategy(textobj, feedback_duration)
-  vim.cmd('normal! v' .. textobj .. 'd')
+  -- Select with mappings like yank and delete, so plugin text objects work
+  vim.cmd('normal v' .. textobj)
+  vim.cmd('normal! d')
   vim.cmd('normal a')
   vim.cmd('startinsert')
   return true

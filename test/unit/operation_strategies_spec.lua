@@ -59,6 +59,39 @@ describe('beam.operation_strategies', function()
     end)
   end)
 
+  describe('Text objects from mappings', function()
+    local buf
+
+    before_each(function()
+      buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(buf)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'foo max bar' })
+      -- A plugin-only text object, like mini.ai's
+      vim.keymap.set('x', 'iz', 'iw', { buffer = buf })
+      vim.api.nvim_win_set_cursor(0, { 1, 4 })
+    end)
+
+    after_each(function()
+      vim.cmd('stopinsert')
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it('change runs a mapped text object', function()
+      strategies.strategies.change.execute('iz', 0)
+      assert.same({ 'foo  bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it('change still runs a built-in text object', function()
+      strategies.strategies.change.execute('iw', 0)
+      assert.same({ 'foo  bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it('delete runs a mapped text object', function()
+      strategies.strategies.delete.execute('iz', 1)
+      assert.same({ 'foo  bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+  end)
+
   describe('Markdown codeblock handling', function()
     it('should find codeblock boundaries', function()
       -- This would need a mock buffer to test properly
