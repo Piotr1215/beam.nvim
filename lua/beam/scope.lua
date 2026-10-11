@@ -320,7 +320,9 @@ local function find_delimited_instances(textobj_key, source_buf)
       vim.fn.cursor(pos[1], pos[2] + 1)
     elseif should_process_bracket(search_key, pos) then
       -- Try to select the text object at this position
-      vim.api.nvim_win_set_cursor(0, pos)
+      -- searchpos() columns are 1-based; on the delimiter itself, Vim pairs
+      -- quotes from the line start instead of taking the gap after a string
+      vim.fn.cursor(pos[1], pos[2])
       local instance = try_select_text_object(textobj_key, search_key)
       if instance and not is_duplicate_instance(instances, instance) then
         table.insert(instances, instance)

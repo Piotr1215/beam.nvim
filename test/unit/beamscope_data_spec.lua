@@ -60,7 +60,7 @@ describe('BeamScope data-driven tests', function()
           'const d = "another "nested" quote";',
         },
         textobj = '"',
-        expected_count = 4, -- Escaped quotes are detected as separate instances
+        expected_count = 3, -- Quotes pair from the line start as in Vim: "another " and " quote"
         expected_first = 'double',
       },
     }
@@ -250,6 +250,31 @@ describe('BeamScope data-driven tests', function()
       assert.equals(1, #backtick_instances, 'Should find 1 backtick pair')
 
       vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
+  describe('several strings on one line', function()
+    local function previews(textobj, lines)
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      local found = {}
+      for _, instance in ipairs(scope.find_text_objects(textobj, buf)) do
+        table.insert(found, instance.preview)
+      end
+      vim.api.nvim_buf_delete(buf, { force = true })
+      return found
+    end
+
+    it('lists the strings, not the code between them', function()
+      assert.same({ 'zzz', 'no', 'zzz' }, previews("'", { "a = 'zzz' + 'no' + 'zzz'" }))
+      assert.same({ 'left', 'right' }, previews('"', { 'STEP = {"left": -1, "right": 1}' }))
+    end)
+
+    it('lists dictionary keys inside an f-string', function()
+      assert.same(
+        { 'hp', 'wait', ' ' },
+        previews("'", { [[print(f"{g['hp']} {'wait':<5} {' '.join(notes)}")]] })
+      )
     end)
   end)
 
