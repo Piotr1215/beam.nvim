@@ -1,5 +1,5 @@
 *beam.nvim.txt*     Navigate and perform text operations at the speed of light
-                              For Neovim >= 0.9.0    Last change: 2026 July 25
+                           For Neovim >= 0.9.0    Last change: 2026 October 11
 
 ==============================================================================
 Table of Contents                                *beam.nvim-table-of-contents*
@@ -36,14 +36,14 @@ Or easier if you know that next object to change is right below.
 `[1]<text object (,cim)> [2]<enter>`
 
 
-- |beam.nvim-quick-examples|
-- |beam.nvim-installation|
-- |beam.nvim-features|
-- |beam.nvim-usage|
-- |beam.nvim-configuration|
-- |beam.nvim-troubleshooting|
-- |beam.nvim-inspiration|
-- |beam.nvim-license|
+- |beam.nvim-beam.nvim-quick-examples|
+- |beam.nvim-beam.nvim-installation|
+- |beam.nvim-beam.nvim-features|
+- |beam.nvim-beam.nvim-usage|
+- |beam.nvim-beam.nvim-configuration|
+- |beam.nvim-beam.nvim-troubleshooting|
+- |beam.nvim-beam.nvim-inspiration|
+- |beam.nvim-beam.nvim-license|
 
 
 QUICK EXAMPLES                            *beam.nvim-beam.nvim-quick-examples*
@@ -116,7 +116,7 @@ FULL SETUP (WITH TELESCOPE FOR CROSS-BUFFER SEARCH)
       { src = "https://github.com/nvim-telescope/telescope.nvim" },
       { src = "https://github.com/Piotr1215/beam.nvim" },
     })
-    
+
     require("beam").setup()  -- Uses default prefix ','
 <
 
@@ -127,7 +127,7 @@ MINIMAL SETUP (WITHOUT CROSS-BUFFER SEARCH)
     vim.pack.add({
       { src = "https://github.com/Piotr1215/beam.nvim" },
     })
-    
+
     require("beam").setup()  -- Single buffer operations only
 <
 
@@ -208,40 +208,82 @@ COMMON OPERATIONS ~
   Keys     Action        Example Use Case           Cursor Behavior
   -------- ------------- -------------------------- ------------------------
   ,yi"     Yank inside   Copy string without moving Returns to origin
-           quotes                                   
+           quotes
 
   ,ya(     Yank around   Copy function call with    Returns to origin
-           parentheses   parens                     
+           parentheses   parens
 
   ,dip     Delete inside Remove paragraph content   Returns to origin
-           paragraph                                
+           paragraph
 
   ,dap     Delete around Remove entire paragraph +  Returns to origin
-           paragraph     spacing                    
+           paragraph     spacing
 
   ,ciw     Change inside Replace word under search  Stays at target
-           word                                     
+           word
 
   ,ci"     Change inside Edit string content        Stays at target
-           quotes                                   
+           quotes
 
   ,vi{     Select inside Highlight code block       Stays at target
-           braces                                   
+           braces
 
   ,vit     Select inside Select tag content         Stays at target
-           HTML tag                                 
+           HTML tag
 
   ,Y       Yank entire   Copy full line at search   Returns to origin
-           line                                     
+           line
 
   ,C       Change entire Replace line at search     Stays at target
-           line                                     
+           line
   --------------------------------------------------------------------------
 
 SEARCH NAVIGATION ~
 
 While searching: - `Ctrl-G` - Next match - `Ctrl-T` - Previous match - `Enter`
 - Execute - `Esc` - Cancel
+
+
+EVERY MATCH (NEOVIM 0.13+) ~
+
+On Neovim builds with the native multicursor operator (`:help zq`), beam adds a
+second set of mappings under `<prefix>q` that act on many targets at once
+instead of one.
+
+Every mapping opens a search prompt; type a pattern and `<CR>`. Brackets,
+quotes and tags also open the same BeamScope list as `,ci(`, and the pattern
+picks every instance whose contents match; `<CR>` alone picks all of them. When
+nested instances both qualify, the inner one wins. `<Esc>` leaves the prompt to
+browse the list, and `/` opens it again. Other text objects, motions and line
+operators act at every match of the pattern.
+
+  -----------------------------------------------------------------------
+  Keys                           Action
+  ------------------------------ ----------------------------------------
+  ,qci( then here<CR>            Change inside every () whose contents
+                                 match here; typing appears in each
+
+  ,qyi" then <CR>                Yank every quoted string; the yanks are
+                                 joined linewise
+
+  ,qdiw then error<CR>           Delete the word at every match of error
+
+  ,qD then ^log<CR>              Delete every line that starts with log
+
+  ,qvi" then <CR>                Select inside every pair of quotes, then
+                                 use any operator
+  -----------------------------------------------------------------------
+Yank and delete end the multicursor session and return to where you started.
+Change and visual leave the cursors in place; press `<C-L>` to clear them when
+done.
+
+beam detects `zq` at startup and creates these mappings only when it works. Set
+`multi_key = false` to turn them off, or another single key to move them.
+
+Neovim’s own text objects (`iw`, `i"`, `i(` and the rest) always run as built
+in, even when a plugin such as mini.ai remaps them, because those plugin
+mappings do not replay per cursor. Text objects that exist only in a plugin may
+not work at every cursor.
 
 
 SUPPORTED TEXT OBJECTS ~
@@ -354,7 +396,7 @@ Add the pending operation indicator to your statusline:
         function() return vim.g.beam_search_operator_indicator or '' end
       }
     }
-    
+
     -- Native statusline
     vim.opt.statusline:append('%{get(g:,"beam_search_operator_indicator","")}')
 <
@@ -366,19 +408,20 @@ Full configuration options ~
       -- Core settings
       prefix = ',',                      -- Prefix for all mappings (forward search)
       backward_prefix = nil,             -- Optional prefix for backward search (e.g., ';')
-    
+      multi_key = 'q',                   -- <prefix>q<op><textobj> acts on every match (Neovim with zq); false disables
+
       -- Visual feedback
       visual_feedback_duration = 150,    -- Duration to show selection before operation
       clear_highlight = true,            -- Clear search highlight after operation
       clear_highlight_delay = 500,       -- Delay before clearing highlight
-      
+
       -- Cross-buffer operations with Telescope
       cross_buffer = {
         enabled = false,                 -- Enable cross-buffer operations
         fuzzy_finder = 'telescope',      -- Fuzzy finder to use (currently only telescope)
         include_hidden = false,          -- Include hidden buffers in search (default: only visible)
       },
-      
+
       -- BeamScope visual selection
       beam_scope = {
         enabled = true,                  -- Enable BeamScope for visual text object selection
@@ -391,7 +434,7 @@ Full configuration options ~
         preview_context = 3,             -- Lines of context in preview
         window_width = 80,               -- Maximum width of BeamScope window
       },
-      
+
       -- Text object configuration
       enable_default_text_objects = true, -- Enable beam's custom text objects (im/am for markdown code blocks)
       auto_discover_custom_text_objects = true, -- Discover custom text objects from plugins (mini.ai, treesitter, etc.)
@@ -400,10 +443,10 @@ Full configuration options ~
       excluded_motions = {},             -- List of motion keys to exclude (e.g., {'Q', 'R'})
       resolved_conflicts = {},          -- Mark conflicts as intentional (e.g., {'m'})
       custom_text_objects = {},         -- Define custom text objects (key = description pairs)
-      
+
       -- Search behavior
       smart_highlighting = false,        -- Context-aware search highlighting (native search only)
-      
+
       -- Experimental features
       experimental = {
         telescope_single_buffer = {
