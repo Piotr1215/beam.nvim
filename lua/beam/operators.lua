@@ -54,7 +54,8 @@ end
 ---@param context table
 ---@return boolean success
 function M.execute_operation(context)
-  return pcall(function()
+  -- A strategy returns false when the text object found nothing
+  local ok, result = pcall(function()
     local cfg = config.current
     local feedback_duration = cfg.visual_feedback_duration or constants.VISUAL_FEEDBACK_DURATION
 
@@ -73,6 +74,7 @@ function M.execute_operation(context)
       return strategy.execute(context.textobj, feedback_duration)
     end
   end)
+  return ok and result ~= false
 end
 
 ---Check if textobj is markdown codeblock

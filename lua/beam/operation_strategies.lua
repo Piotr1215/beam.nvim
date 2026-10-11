@@ -8,12 +8,31 @@ local constants = require('beam.constants')
 ---@field clears_highlight boolean
 ---@field enters_insert boolean
 
+---Select a text object in Visual mode. Mappings apply, so plugin text objects
+---work. A text object that finds nothing beeps, which drops the rest of the
+---:normal keys, so the trailing <Cmd> only runs when the selection succeeded.
+---@param textobj string
+---@return boolean selected Whether Visual mode holds the text object
+local function select_textobj(textobj)
+  vim.g.beam_textobj_selected = false
+  vim.cmd.normal('v' .. textobj .. vim.keycode('<Cmd>let g:beam_textobj_selected = v:true<CR>'))
+  local visual = vim.fn.mode():match('^[vV\22]') ~= nil
+  local selected = vim.g.beam_textobj_selected and visual
+  vim.g.beam_textobj_selected = nil
+  if not selected and visual then
+    vim.cmd('normal! \27')
+  end
+  return selected
+end
+
 ---Execute yank operation
 ---@param textobj string
 ---@param feedback_duration number
 ---@return boolean success
 local function yank_strategy(textobj, feedback_duration)
-  vim.cmd('normal v' .. textobj)
+  if not select_textobj(textobj) then
+    return false
+  end
   vim.cmd('redraw')
   vim.cmd('sleep ' .. feedback_duration .. 'm')
   vim.cmd('normal! y')
@@ -25,7 +44,9 @@ end
 ---@param feedback_duration number
 ---@return boolean success
 local function delete_strategy(textobj, feedback_duration)
-  vim.cmd('normal v' .. textobj)
+  if not select_textobj(textobj) then
+    return false
+  end
   vim.cmd('redraw')
   vim.cmd('sleep ' .. feedback_duration .. 'm')
   vim.cmd('normal! d')
@@ -37,8 +58,9 @@ end
 ---@param feedback_duration number
 ---@return boolean success
 local function change_strategy(textobj, feedback_duration)
-  -- Select with mappings like yank and delete, so plugin text objects work
-  vim.cmd('normal v' .. textobj)
+  if not select_textobj(textobj) then
+    return false
+  end
   vim.cmd('normal! d')
   vim.cmd('normal a')
   vim.cmd('startinsert')
@@ -50,8 +72,7 @@ end
 ---@param feedback_duration number
 ---@return boolean success
 local function visual_strategy(textobj, feedback_duration)
-  vim.cmd('normal v' .. textobj)
-  return true
+  return select_textobj(textobj)
 end
 
 ---Execute line yank operation
