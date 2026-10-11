@@ -189,11 +189,11 @@ While searching:
 
 On Neovim builds with the native multicursor operator (`:help zq`), beam adds a second set of mappings under `<prefix>q` that act on many targets at once instead of one.
 
-Brackets, quotes and tags open the same BeamScope list as `,ci(`. Type `/pattern<CR>` in the list to act on every instance whose contents match, or `<CR>` to act on all of them. When nested instances both qualify, the inner one wins. Other text objects, motions and line operators take a search and act at every match.
+Every mapping opens a search prompt; type a pattern and `<CR>`. Brackets, quotes and tags also open the same BeamScope list as `,ci(`, and the pattern picks every instance whose contents match; `<CR>` alone picks all of them. When nested instances both qualify, the inner one wins. `<Esc>` leaves the prompt to browse the list, and `/` opens it again. Other text objects, motions and line operators act at every match of the pattern.
 
 | Keys | Action |
 |------|--------|
-| `,qci(` then `/here<CR>` | Change inside every `()` whose contents match `here`; typing appears in each |
+| `,qci(` then `here<CR>` | Change inside every `()` whose contents match `here`; typing appears in each |
 | `,qyi"` then `<CR>` | Yank every quoted string; the yanks are joined linewise |
 | `,qdiw` then `error<CR>` | Delete the word at every match of `error` |
 | `,qD` then `^log<CR>` | Delete every line that starts with `log` |

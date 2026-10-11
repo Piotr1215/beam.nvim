@@ -1055,6 +1055,11 @@ local function setup_search_handling(scope_buf, augroup)
     local cmdtype = vim.fn.getcmdtype()
     if cmdtype == '/' or cmdtype == '?' then
       execute_on_search = true
+      -- The filter runs on instance contents, so skip the list search: an
+      -- empty pattern would otherwise reuse the last one or fail with E35
+      if M.scope_state.multi then
+        return '<C-c>'
+      end
     end
     return '<CR>'
   end, { buffer = scope_buf, expr = true })

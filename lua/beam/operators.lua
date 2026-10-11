@@ -348,11 +348,11 @@ end
 ---@param textobj string Text object or motion ('' for line actions)
 ---@return string Returns '/' to trigger search mode, '' when smart search starts it
 function M.BeamMultiSearchSetup(action, textobj)
-  -- Scoped objects list their instances; the list's search picks which ones
+  -- Scoped objects list their instances; the list's search picks which ones,
+  -- so the prompt opens with the list
   local scope = require('beam.scope')
   if textobj ~= '' and scope.should_use_scope(textobj) then
-    scope.beam_scope(action, textobj, { multi = true })
-    return ''
+    return scope.beam_scope(action, textobj, { multi = true }) and '/' or ''
   end
 
   local result = M.create_setup_function(action, true)(textobj)

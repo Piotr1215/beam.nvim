@@ -355,12 +355,14 @@ describe('beam.multicursor', function()
         req('nvim_win_set_cursor', 0, { 2, 0 })
       end)
 
-      ---Type a beam mapping, wait for the BeamScope list, then type keys in it
+      ---Type a beam mapping, wait for the list and its search prompt, then type keys
       local function scope(lhs, keys)
         req('nvim_input', lhs)
         assert.is_true(wait_for(function()
           return req('nvim_buf_get_name', 0):match('BeamScope') ~= nil
+            and req('nvim_get_mode').mode == 'c'
         end))
+        assert.equals('/', req('nvim_call_function', 'getcmdtype', {}))
         req('nvim_input', keys)
       end
 
@@ -368,7 +370,7 @@ describe('beam.multicursor', function()
         if not has_zq then
           return pending('needs Neovim with zq')
         end
-        scope(',qci(', '/HERE<CR>')
+        scope(',qci(', 'HERE<CR>')
         assert.is_true(wait_for(function()
           return req('nvim_get_mode').mode == 'i'
         end))
@@ -397,6 +399,23 @@ describe('beam.multicursor', function()
         end))
         assert.same({ 2, 0 }, req('nvim_win_get_cursor', 0))
         assert.same(scoped, buffer())
+        assert.equals('', req('nvim_get_vvar', 'errmsg'))
+      end)
+
+      it('keeps the list open when the prompt is escaped', function()
+        if not has_zq then
+          return pending('needs Neovim with zq')
+        end
+        scope(',qyi(', '<Esc>')
+        assert.is_true(wait_for(function()
+          return req('nvim_get_mode').mode == 'n'
+        end))
+        assert.truthy(req('nvim_buf_get_name', 0):match('BeamScope'))
+        req('nvim_input', '<CR>')
+        local joined = '__file__\nHERE, "sim-state.json"\nHERE, "world-state.json"\n'
+        assert.is_true(wait_for(function()
+          return req('nvim_call_function', 'getreg', { '"' }) == joined
+        end))
       end)
 
       it('finds a match past the first line of a multi-line pair', function()
@@ -412,7 +431,7 @@ describe('beam.multicursor', function()
           { 'call(', '  one,', '  HERE', ')', 'other(two)' }
         )
         req('nvim_win_set_cursor', 0, { 5, 0 })
-        scope(',qyi(', '/HERE<CR>')
+        scope(',qyi(', 'HERE<CR>')
         assert.is_true(wait_for(function()
           return req('nvim_call_function', 'getreg', { '"' }):match('HERE') ~= nil
         end))
@@ -425,7 +444,7 @@ describe('beam.multicursor', function()
         if not has_zq then
           return pending('needs Neovim with zq')
         end
-        scope(',qci(', '/nothing<CR>')
+        scope(',qci(', 'nothing<CR>')
         assert.is_true(wait_for(function()
           return req('nvim_buf_get_name', 0):match('BeamScope') == nil
         end))
