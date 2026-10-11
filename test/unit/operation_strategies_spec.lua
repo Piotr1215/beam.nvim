@@ -59,6 +59,67 @@ describe('beam.operation_strategies', function()
     end)
   end)
 
+  describe('Text objects from mappings', function()
+    local buf
+
+    before_each(function()
+      buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(buf)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'foo max bar' })
+      -- A plugin-only text object, like mini.ai's
+      vim.keymap.set('x', 'iz', 'iw', { buffer = buf })
+      vim.api.nvim_win_set_cursor(0, { 1, 4 })
+    end)
+
+    after_each(function()
+      vim.cmd('stopinsert')
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it('change runs a mapped text object', function()
+      strategies.strategies.change.execute('iz', 0)
+      assert.same({ 'foo  bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it('change still runs a built-in text object', function()
+      strategies.strategies.change.execute('iw', 0)
+      assert.same({ 'foo  bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it('change leaves the text when the text object finds nothing', function()
+      assert.is_false(strategies.strategies.change.execute('i(', 0))
+      assert.same({ 'foo max bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+      assert.equals('n', vim.fn.mode())
+    end)
+
+    it('delete leaves the text when the text object finds nothing', function()
+      assert.is_false(strategies.strategies.delete.execute('i(', 1))
+      assert.same({ 'foo max bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it('visual leaves Visual mode when the text object finds nothing', function()
+      assert.is_false(strategies.strategies.visual.execute('i(', 0))
+      assert.equals('n', vim.fn.mode())
+    end)
+
+    it('a mapping that cancels the selection counts as nothing found', function()
+      vim.keymap.set('x', 'iq', '<Esc>', { buffer = buf })
+      assert.is_false(strategies.strategies.change.execute('iq', 0))
+      assert.same({ 'foo max bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
+    it('execute_operation reports a text object that finds nothing', function()
+      local operators = require('beam.operators')
+      assert.is_false(operators.execute_operation({ action = 'change', textobj = 'i(' }))
+      assert.is_true(operators.execute_operation({ action = 'change', textobj = 'iz' }))
+    end)
+
+    it('delete runs a mapped text object', function()
+      strategies.strategies.delete.execute('iz', 1)
+      assert.same({ 'foo  bar' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+  end)
+
   describe('Markdown codeblock handling', function()
     it('should find codeblock boundaries', function()
       -- This would need a mock buffer to test properly
